@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/finalize-trips",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
