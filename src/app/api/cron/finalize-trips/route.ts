@@ -3,10 +3,11 @@ import { finalizeAllExpiredTrips } from "@/lib/tripLifecycle";
 
 export const dynamic = "force-dynamic"; // always hit the DB live, never statically cached
 
-// Scheduled via vercel.json crons (see repo root). Also mirrored by a lazy,
-// per-page check (maybeFinalizeTrip in lib/tripLifecycle.ts) since Vercel's
-// Hobby-tier cron only runs once a day — nowhere near tight enough to catch a
-// 48-hour deadline promptly on its own.
+// Not scheduled. Finalization is purely on-demand: `maybeFinalizeTrip` in
+// lib/tripLifecycle.ts runs whenever anyone loads a trip past its deadline,
+// which covers every case that actually matters (someone comes back to look).
+// This route is kept as a manual/optional trigger — e.g. hit it by hand, or
+// wire up a cron later — for the edge case of a trip nobody ever revisits.
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (secret) {

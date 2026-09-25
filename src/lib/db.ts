@@ -68,6 +68,24 @@ export async function listParticipantsWithResponses(
   }));
 }
 
+export async function getParticipant(participantId: string): Promise<Participant | null> {
+  const { data, error } = await supabase.from("participants").select().eq("id", participantId).maybeSingle();
+  if (error) throw error;
+  return data as Participant | null;
+}
+
+/** Read-only lookup by (trip, name) — unlike findOrCreateParticipant, never creates a row. */
+export async function findParticipantByName(tripId: string, name: string): Promise<Participant | null> {
+  const { data, error } = await supabase
+    .from("participants")
+    .select()
+    .eq("trip_id", tripId)
+    .ilike("name", name.trim())
+    .maybeSingle();
+  if (error) throw error;
+  return data as Participant | null;
+}
+
 /** Finds an existing participant by (trip, name) or creates one. Names identify people — no login. */
 export async function findOrCreateParticipant(tripId: string, name: string): Promise<Participant> {
   const trimmed = name.trim();

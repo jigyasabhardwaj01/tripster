@@ -11,6 +11,8 @@ export default function NewTripPage() {
   const [tripName, setTripName] = useState("");
   const [organizerName, setOrganizerName] = useState("");
   const [inviteeNames, setInviteeNames] = useState("");
+  const [expectedCount, setExpectedCount] = useState("5");
+  const [confirmationWindowHours, setConfirmationWindowHours] = useState("48");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,10 +26,14 @@ export default function NewTripPage() {
         .split(",")
         .map((n) => n.trim())
         .filter(Boolean);
-      const trip = await createTrip(tripName.trim(), organizerName.trim(), { invitees });
+      const trip = await createTrip(tripName.trim(), organizerName.trim(), {
+        invitees,
+        expectedParticipantCount: Number(expectedCount) || 5,
+        confirmationWindowHours: Number(confirmationWindowHours) || 48,
+      });
       addMyTrip({ tripId: trip.id, tripName: trip.name, role: "organizer" });
       storeCreatorToken(trip.id, trip.creator_token);
-      router.push(`/trip/${trip.id}/submit?share=1&name=${encodeURIComponent(organizerName.trim())}`);
+      router.push(`/trip/${trip.id}`);
     } catch (err) {
       console.error(err);
       setError("Couldn't create the trip. Check your Supabase setup and try again.");
@@ -36,7 +42,7 @@ export default function NewTripPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col justify-center gap-6">
+    <main className="flex flex-1 flex-col justify-center gap-6 py-4">
       <div>
         <h1 className="text-2xl font-bold">Start a trip</h1>
         <p className="mt-1 text-sm text-gray-600">
@@ -83,6 +89,36 @@ export default function NewTripPage() {
             just count responses as they come in.
           </span>
         </label>
+
+        <div className="flex gap-3">
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-sm font-medium text-gray-700">Group size</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={2}
+              className="rounded-lg border border-gray-300 px-3 py-2"
+              value={expectedCount}
+              onChange={(e) => setExpectedCount(e.target.value)}
+              required
+            />
+            <span className="text-xs text-gray-500">Matching runs once this many responses are in.</span>
+          </label>
+
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="text-sm font-medium text-gray-700">Confirm window (hrs)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="rounded-lg border border-gray-300 px-3 py-2"
+              value={confirmationWindowHours}
+              onChange={(e) => setConfirmationWindowHours(e.target.value)}
+              required
+            />
+            <span className="text-xs text-gray-500">How long the group has to confirm once matched.</span>
+          </label>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 

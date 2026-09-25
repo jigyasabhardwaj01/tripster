@@ -14,28 +14,8 @@
 import { supabase } from "./supabase";
 import { computeShortlist, ParticipantResponse } from "./scoring";
 import { getTrip, listParticipantsWithResponses, saveShortlist } from "./db";
-import { Trip } from "./types";
 
-const CREATOR_TOKEN_PREFIX = "tripster:creatorToken:";
-
-export function storeCreatorToken(tripId: string, token: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(`${CREATOR_TOKEN_PREFIX}${tripId}`, token);
-  } catch {
-    // localStorage can be unavailable (private browsing, quota) — the organizer just won't
-    // see organizer-only controls on this browser; the trip itself is unaffected
-  }
-}
-
-export function isTripCreator(tripId: string, trip: Trip): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(`${CREATOR_TOKEN_PREFIX}${tripId}`) === trip.creator_token;
-  } catch {
-    return false;
-  }
-}
+export { storeCreatorToken, isTripCreator } from "./organizerToken";
 
 /**
  * Call after any response is saved. If this response brought the trip up to
@@ -73,9 +53,11 @@ export async function maybeAdvanceAfterResponse(tripId: string): Promise<void> {
 }
 
 /**
- * Call opportunistically on page load (belt-and-suspenders alongside the cron
- * route — see /api/cron/finalize-trips) — flips this one trip to "final" if
- * its confirmation window has passed.
+ * Call opportunistically on page load — the primary (and, by design, only
+ * scheduled-by-nothing) finalization path. Flips this one trip to "final" if
+ * its confirmation window has passed. See /api/cron/finalize-trips for an
+ * optional, unscheduled manual-trigger route covering the edge case of a
+ * trip nobody ever revisits.
  */
 export async function maybeFinalizeTrip(tripId: string): Promise<void> {
   const trip = await getTrip(tripId);

@@ -44,32 +44,12 @@ export default function MyTripsPage() {
                   {t.role === "organizer" ? "Organizer" : "Participant"}
                 </span>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm">
-                {t.role === "organizer" && (
-                  <Link
-                    href={`/trip/${t.tripId}/status`}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-700"
-                  >
-                    Status
-                  </Link>
-                )}
+              <div className="mt-3">
                 <Link
-                  href={`/trip/${t.tripId}/submit`}
-                  className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-700"
+                  href={`/trip/${t.tripId}`}
+                  className="block rounded-lg bg-brand-500 px-3 py-1.5 text-center text-sm font-medium text-white"
                 >
-                  My response
-                </Link>
-                <Link
-                  href={`/trip/${t.tripId}/confirm`}
-                  className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-center font-medium text-gray-700"
-                >
-                  Confirm
-                </Link>
-                <Link
-                  href={`/trip/${t.tripId}/results`}
-                  className="flex-1 rounded-lg bg-brand-500 px-3 py-1.5 text-center font-medium text-white"
-                >
-                  Results
+                  Open trip
                 </Link>
               </div>
             </div>
