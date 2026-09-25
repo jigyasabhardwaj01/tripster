@@ -17,6 +17,7 @@ import {
   setConfirmation,
   upsertResponse,
 } from "@/lib/db";
+import { myEffectiveConfirmation, summarizeDestinationConfirmations } from "@/lib/confirmations";
 import { formatDeadline } from "@/lib/format";
 import { addMyTrip } from "@/lib/myTrips";
 import { DestinationScore } from "@/lib/scoring";
@@ -86,12 +87,9 @@ export default function TripPage() {
   const isOrganizer = useMemo(() => (trip ? isTripCreator(tripId, trip) : false), [trip, tripId]);
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/trip/${tripId}` : "";
 
-  const myConfirmations = useMemo(() => {
-    if (!myParticipant) return new Map<string, boolean>();
-    return new Map(
-      confirmations.filter((c) => c.participant_id === myParticipant.id).map((c) => [c.destination_id, c.confirmed])
-    );
-  }, [confirmations, myParticipant]);
+  function confirmationsFor(destinationId: string) {
+    return confirmations.filter((c) => c.destination_id === destinationId);
+  }
 
   async function handleSubmitResponse(values: SubmissionFormValues) {
     const participant = await findOrCreateParticipant(tripId, values.name);
@@ -125,8 +123,12 @@ export default function TripPage() {
     }
   }
 
-  async function handleConfirm(destinationId: string, confirmed: boolean) {
+  async function handleToggleOptOut(destinationId: string) {
     if (!myParticipant) return;
+    // Confirmation is opt-out by default (see lib/confirmations.ts) — this just flips
+    // whatever the participant's current effective status is.
+    const currentlyIn = myEffectiveConfirmation(myParticipant.id, confirmationsFor(destinationId));
+    const confirmed = !currentlyIn;
     await setConfirmation(tripId, myParticipant.id, destinationId, confirmed);
     setConfirmations((prev) => [
       ...prev.filter((c) => !(c.participant_id === myParticipant.id && c.destination_id === destinationId)),
@@ -151,23 +153,19 @@ export default function TripPage() {
       </main>
     );
 
-  function confirmationSummaryFor(destinationId: string) {
-    const confs = confirmations.filter((c) => c.destination_id === destinationId);
-    const stillIn = confs.filter((c) => c.confirmed);
-    const droppedOut = confs.filter((c) => !c.confirmed);
-    const nameFor = (participantId: string) =>
-      scores?.flatMap((s) => s.participantFits).find((f) => f.participantId === participantId)?.participantName;
-    if (confs.length === 0) return <p className="text-xs text-gray-400">No confirmations yet.</p>;
+  function confirmationSummaryFor(score: DestinationScore) {
+    const roster = score.participantFits.map((f) => ({ id: f.participantId, name: f.participantName }));
+    const { stillIn, optedOut } = summarizeDestinationConfirmations(roster, confirmationsFor(score.destination.id));
     return (
       <div className="rounded-lg border border-gray-200 p-2 text-xs text-gray-600">
         <p>
           <span className="font-semibold text-green-700">{stillIn.length} still in:</span>{" "}
-          {stillIn.map((c) => nameFor(c.participant_id)).join(", ") || "—"}
+          {stillIn.map((p) => p.name).join(", ") || "—"}
         </p>
-        {droppedOut.length > 0 && (
+        {optedOut.length > 0 && (
           <p className="mt-1">
-            <span className="font-semibold text-red-700">{droppedOut.length} opted out:</span>{" "}
-            {droppedOut.map((c) => nameFor(c.participant_id)).join(", ")}
+            <span className="font-semibold text-red-700">{optedOut.length} opted out:</span>{" "}
+            {optedOut.map((p) => p.name).join(", ")}
           </p>
         )}
       </div>
@@ -248,7 +246,9 @@ export default function TripPage() {
 
           <div className="flex flex-col gap-4">
             {(scores ?? []).map((score) => {
-              const myAnswer = myConfirmations.get(score.destination.id);
+              const imIn = myParticipant
+                ? myEffectiveConfirmation(myParticipant.id, confirmationsFor(score.destination.id))
+                : true;
               return (
                 <DestinationCard
                   key={score.destination.id}
@@ -257,29 +257,23 @@ export default function TripPage() {
                   // pass a `summary` string here once a real model call is plugged in.
                   footer={
                     <div className="flex flex-col gap-2">
-                      {myParticipant && (
-                        <div className="flex gap-2">
+                      {myParticipant &&
+                        (imIn ? (
                           <button
-                            onClick={() => handleConfirm(score.destination.id, true)}
-                            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${
-                              myAnswer === true
-                                ? "bg-brand-500 text-white"
-                                : "border border-brand-500 text-brand-700"
-                            }`}
+                            onClick={() => handleToggleOptOut(score.destination.id)}
+                            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-600"
                           >
-                            Still in ✓
+                            You&apos;re in ✓ — tap to opt out
                           </button>
+                        ) : (
                           <button
-                            onClick={() => handleConfirm(score.destination.id, false)}
-                            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold ${
-                              myAnswer === false ? "bg-gray-700 text-white" : "border border-gray-400 text-gray-600"
-                            }`}
+                            onClick={() => handleToggleOptOut(score.destination.id)}
+                            className="rounded-lg bg-gray-700 px-3 py-2 text-sm font-semibold text-white"
                           >
-                            Not for me
+                            Opted out — tap to rejoin
                           </button>
-                        </div>
-                      )}
-                      {confirmationSummaryFor(score.destination.id)}
+                        ))}
+                      {confirmationSummaryFor(score)}
                     </div>
                   }
                 />
@@ -301,7 +295,7 @@ export default function TripPage() {
                 key={score.destination.id}
                 score={score}
                 // AI SUMMARY INTEGRATION POINT (not wired up — see lib/summary.ts)
-                footer={confirmationSummaryFor(score.destination.id)}
+                footer={confirmationSummaryFor(score)}
               />
             ))}
           </div>
