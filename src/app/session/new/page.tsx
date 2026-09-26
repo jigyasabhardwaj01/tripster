@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { addMySession } from "@/lib/mySessions";
-import { createSession } from "@/lib/sessionClient";
+import { addMySession, storeMyName } from "@/lib/mySessions";
+import { ApiError, createSession } from "@/lib/sessionClient";
 
 function defaultDeadlineLocal(): string {
   // Datetime-local input wants "YYYY-MM-DDTHH:mm" in the browser's local time.
@@ -15,23 +15,29 @@ function defaultDeadlineLocal(): string {
 export default function NewSessionPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
+  const [organizerName, setOrganizerName] = useState("");
   const [deadlineLocal, setDeadlineLocal] = useState(defaultDeadlineLocal());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() || !deadlineLocal) return;
+    if (!title.trim() || !organizerName.trim() || !deadlineLocal) return;
     setSubmitting(true);
     setError(null);
     try {
       const deadlineIso = new Date(deadlineLocal).toISOString();
-      const { session } = await createSession(title.trim(), deadlineIso);
+      const { session } = await createSession(title.trim(), organizerName.trim(), deadlineIso);
       addMySession({ sessionId: session.id, title: title.trim() });
+      storeMyName(session.id, organizerName.trim());
       router.push(`/session/${session.id}`);
     } catch (err) {
       console.error(err);
-      setError("Couldn't create the trip. Please try again.");
+      const message =
+        err instanceof ApiError && err.status < 500
+          ? err.message
+          : "Couldn't create the trip. Check your Supabase/Gemini setup and try again.";
+      setError(message);
       setSubmitting(false);
     }
   }
@@ -54,6 +60,17 @@ export default function NewSessionPage() {
             placeholder="e.g. Goa-or-bust 2026"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-gray-700">Your name</span>
+          <input
+            className="rounded-lg border border-gray-300 px-3 py-2"
+            placeholder="e.g. Karan"
+            value={organizerName}
+            onChange={(e) => setOrganizerName(e.target.value)}
             required
           />
         </label>

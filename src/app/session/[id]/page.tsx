@@ -105,6 +105,7 @@ export default function SessionPage() {
       <main className="flex flex-1 flex-col gap-5 py-2">
         <div>
           <h1 className="text-2xl font-bold">{view.title}</h1>
+          <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
         </div>
 
         {view.results && <FinalizedResult result={view.results} />}
@@ -132,6 +133,7 @@ export default function SessionPage() {
     <main className="flex flex-1 flex-col gap-5 py-2">
       <div>
         <h1 className="text-2xl font-bold">{view.title}</h1>
+        <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
       </div>
 
       <ShareLink url={shareUrl} label="Share this link with the group" />
@@ -148,6 +150,7 @@ export default function SessionPage() {
 
       <SessionSubmissionForm
         initialValues={loadMyValues(sessionId) ?? (myName ? { name: myName } : undefined)}
+        nameHint={myName === view.organizerName ? "you're the organizer — this is how the group will see you" : undefined}
         onSubmit={handleSubmit}
       />
 

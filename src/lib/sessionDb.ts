@@ -9,6 +9,7 @@ export { InvalidDateRangeError } from "./dateRangeValidation";
 export interface Session {
   id: string;
   title: string;
+  organizer_name: string;
   deadline: string;
   created_at: string;
   locked: boolean;
@@ -41,10 +42,10 @@ export class SessionLockedError extends Error {
   }
 }
 
-export async function createSession(title: string, deadlineIso: string): Promise<Session> {
+export async function createSession(title: string, organizerName: string, deadlineIso: string): Promise<Session> {
   const { data, error } = await getSupabaseAdmin()
     .from("sessions")
-    .insert({ title, deadline: deadlineIso })
+    .insert({ title, organizer_name: organizerName, deadline: deadlineIso })
     .select()
     .single();
   if (error) throw error;
@@ -103,24 +104,38 @@ export async function upsertSubmission(sessionId: string, input: UpsertSubmissio
   }
   validateDateRanges(input.dateRanges);
 
-  const { data, error } = await getSupabaseAdmin()
+  const name = input.name.trim();
+  const row = {
+    session_id: sessionId,
+    name,
+    budget_min: input.budgetMin,
+    budget_max: input.budgetMax,
+    date_ranges: input.dateRanges,
+    destination_types: input.destinationTypes,
+    preferred_locations: input.preferredLocations,
+    dealbreakers: input.dealbreakers,
+    submitted_at: new Date().toISOString(),
+  };
+
+  // Not a plain `.upsert(..., { onConflict })`: the uniqueness constraint is
+  // on lower(name), an expression index, which PostgREST's onConflict can't
+  // target by plain column names (ON CONFLICT must match the index
+  // definition exactly). Case-insensitive "same person, edit their answer"
+  // matching is done here instead, the same way the old /trip system's
+  // findOrCreateParticipant does it.
+  const { data: existing, error: findErr } = await getSupabaseAdmin()
     .from("submissions")
-    .upsert(
-      {
-        session_id: sessionId,
-        name: input.name.trim(),
-        budget_min: input.budgetMin,
-        budget_max: input.budgetMax,
-        date_ranges: input.dateRanges,
-        destination_types: input.destinationTypes,
-        preferred_locations: input.preferredLocations,
-        dealbreakers: input.dealbreakers,
-        submitted_at: new Date().toISOString(),
-      },
-      { onConflict: "session_id,name" } // matches the case-insensitive unique index at the DB level
-    )
-    .select()
-    .single();
+    .select("id")
+    .eq("session_id", sessionId)
+    .ilike("name", name)
+    .maybeSingle();
+  if (findErr) throw findErr;
+
+  const query = existing
+    ? getSupabaseAdmin().from("submissions").update(row).eq("id", existing.id)
+    : getSupabaseAdmin().from("submissions").insert(row);
+
+  const { data, error } = await query.select().single();
   if (error) throw error;
   return data as Submission;
 }

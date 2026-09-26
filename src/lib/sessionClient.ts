@@ -42,6 +42,7 @@ export interface FinalizedResult {
 export interface SessionViewResponse {
   id: string;
   title: string;
+  organizerName: string;
   deadline: string;
   locked: boolean;
   submittedNames: string[];
@@ -68,11 +69,15 @@ async function parseJsonOrThrow(res: Response) {
   return body;
 }
 
-export async function createSession(title: string, deadlineIso: string): Promise<{ session: { id: string } }> {
+export async function createSession(
+  title: string,
+  organizerName: string,
+  deadlineIso: string
+): Promise<{ session: { id: string } }> {
   const res = await fetch("/api/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title, deadline: deadlineIso }),
+    body: JSON.stringify({ title, organizerName, deadline: deadlineIso }),
   });
   return parseJsonOrThrow(res);
 }

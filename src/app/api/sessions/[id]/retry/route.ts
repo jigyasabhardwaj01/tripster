@@ -15,6 +15,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   return NextResponse.json({
     id: session.id,
     title: session.title,
+    organizerName: session.organizer_name,
     deadline: session.deadline,
     locked: session.locked,
     submittedNames,
