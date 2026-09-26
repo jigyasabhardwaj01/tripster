@@ -1,5 +1,5 @@
 import "server-only";
-import { supabaseAdmin } from "./supabaseAdmin";
+import { getSupabaseAdmin } from "./supabaseAdmin";
 import { matchDestinations, MatchResult, SubmissionForMatching } from "./gemini";
 
 export interface Session {
@@ -37,7 +37,7 @@ export class SessionLockedError extends Error {
 }
 
 export async function createSession(title: string, deadlineIso: string): Promise<Session> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("sessions")
     .insert({ title, deadline: deadlineIso })
     .select()
@@ -47,14 +47,14 @@ export async function createSession(title: string, deadlineIso: string): Promise
 }
 
 export async function getSession(id: string): Promise<Session | null> {
-  const { data, error } = await supabaseAdmin.from("sessions").select().eq("id", id).maybeSingle();
+  const { data, error } = await getSupabaseAdmin().from("sessions").select().eq("id", id).maybeSingle();
   if (error) throw error;
   return data as Session | null;
 }
 
 /** Safe pre-lock view: just who's submitted, never their actual answers. */
 export async function listSubmittedNames(sessionId: string): Promise<string[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("submissions")
     .select("name")
     .eq("session_id", sessionId)
@@ -64,7 +64,7 @@ export async function listSubmittedNames(sessionId: string): Promise<string[]> {
 }
 
 async function listSubmissions(sessionId: string): Promise<Submission[]> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("submissions")
     .select()
     .eq("session_id", sessionId)
@@ -74,7 +74,7 @@ async function listSubmissions(sessionId: string): Promise<Submission[]> {
 }
 
 export async function getResults(sessionId: string): Promise<ResultsRow | null> {
-  const { data, error } = await supabaseAdmin.from("results").select().eq("session_id", sessionId).maybeSingle();
+  const { data, error } = await getSupabaseAdmin().from("results").select().eq("session_id", sessionId).maybeSingle();
   if (error) throw error;
   return data as ResultsRow | null;
 }
@@ -96,7 +96,7 @@ export async function upsertSubmission(sessionId: string, input: UpsertSubmissio
     throw new SessionLockedError();
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("submissions")
     .upsert(
       {
@@ -172,7 +172,7 @@ export async function loadSessionView(sessionId: string): Promise<SessionView | 
 
 /** Atomically claims the "I'm the one who locks and scores this session" slot. */
 async function claimLock(sessionId: string): Promise<boolean> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from("sessions")
     .update({ locked: true })
     .eq("id", sessionId)
@@ -186,7 +186,7 @@ async function runScoringAndSave(sessionId: string): Promise<void> {
   try {
     const submissions = await listSubmissions(sessionId);
     const result = await matchDestinations(submissions.map(toMatchingInput));
-    const { error } = await supabaseAdmin
+    const { error } = await getSupabaseAdmin()
       .from("results")
       .insert({ session_id: sessionId, options: result.options });
     if (error) throw error;
