@@ -1,6 +1,10 @@
 import "server-only";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { matchDestinations, MatchResult, SubmissionForMatching } from "./gemini";
+import { DateRange, validateDateRanges } from "./dateRangeValidation";
+
+export type { DateRange } from "./dateRangeValidation";
+export { InvalidDateRangeError } from "./dateRangeValidation";
 
 export interface Session {
   id: string;
@@ -16,8 +20,9 @@ export interface Submission {
   name: string;
   budget_min: number;
   budget_max: number;
-  date_ranges: { start: string; end: string }[];
+  date_ranges: DateRange[];
   destination_types: string[];
+  preferred_locations: string[];
   dealbreakers: string;
   submitted_at: string;
 }
@@ -26,7 +31,7 @@ export interface ResultsRow {
   id: string;
   session_id: string;
   generated_at: string;
-  options: MatchResult["options"];
+  options: MatchResult;
 }
 
 export class SessionLockedError extends Error {
@@ -83,18 +88,20 @@ export interface UpsertSubmissionInput {
   name: string;
   budgetMin: number;
   budgetMax: number;
-  dateRanges: { start: string; end: string }[];
+  dateRanges: DateRange[];
   destinationTypes: string[];
+  preferredLocations: string[];
   dealbreakers: string;
 }
 
-/** Throws SessionLockedError if the deadline has passed — never fails silently. */
+/** Throws SessionLockedError if the deadline has passed, InvalidDateRangeError if any range is bad — never fails silently. */
 export async function upsertSubmission(sessionId: string, input: UpsertSubmissionInput): Promise<Submission> {
   const session = await getSession(sessionId);
   if (!session) throw new Error("Session not found");
   if (session.locked || new Date(session.deadline).getTime() <= Date.now()) {
     throw new SessionLockedError();
   }
+  validateDateRanges(input.dateRanges);
 
   const { data, error } = await getSupabaseAdmin()
     .from("submissions")
@@ -106,6 +113,7 @@ export async function upsertSubmission(sessionId: string, input: UpsertSubmissio
         budget_max: input.budgetMax,
         date_ranges: input.dateRanges,
         destination_types: input.destinationTypes,
+        preferred_locations: input.preferredLocations,
         dealbreakers: input.dealbreakers,
         submitted_at: new Date().toISOString(),
       },
@@ -122,8 +130,9 @@ function toMatchingInput(s: Submission): SubmissionForMatching {
     name: s.name,
     budgetMin: s.budget_min,
     budgetMax: s.budget_max,
-    dateRanges: s.date_ranges,
+    dateRanges: s.date_ranges.map((r) => ({ startDate: r.start_date, exitDate: r.exit_date })),
     destinationTypes: s.destination_types,
+    preferredLocations: s.preferred_locations,
     dealbreakers: s.dealbreakers,
   };
 }
@@ -188,11 +197,11 @@ async function runScoringAndSave(sessionId: string): Promise<void> {
     const result = await matchDestinations(submissions.map(toMatchingInput));
     const { error } = await getSupabaseAdmin()
       .from("results")
-      .insert({ session_id: sessionId, options: result.options });
+      .insert({ session_id: sessionId, options: result });
     if (error) throw error;
   } catch (err) {
     // Locked stays true (the deadline really did pass) but results stays
-    // empty — surfaced to the frontend as scoringFailed, with retrySession
+    // empty — surfaced to the frontend as scoringFailed, with retryScoring
     // below as the manual recovery path. We do NOT unlock or auto-retry here.
     console.error(`Scoring failed for session ${sessionId}:`, err);
   }
