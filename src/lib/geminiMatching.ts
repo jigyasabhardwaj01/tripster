@@ -108,9 +108,9 @@ CANDIDATE LOCATIONS (choose exactly one of these): ${candidates.join(", ")}
 PARTICIPANTS:
 ${lines.join("\n\n")}
 
-For each candidate, score it against every participant's budget (budget_min/budget_max), calendar overlap across everyone's date ranges, and destination-type/dealbreaker fit — a dealbreaker hit on a candidate counts heavily against it even if budget and dates are fine for that person. Pick the ONE candidate that scores best across the whole group. If there's a tie, prefer whichever candidate more people originally suggested in "suggested locations".
+For each candidate, score it against every participant's budget (budget_min/budget_max), calendar overlap across everyone's date ranges, destination-type/dealbreaker fit, and whether the group's overlapping dates actually fall in a good/peak travel season for that specific place (e.g. a hill station in monsoon, a beach town in peak monsoon rains, or a desert town in peak summer heat are all poor timing even if budget and dates otherwise line up) — weigh bad seasonal timing as a real downside, not just budget/dates/dealbreakers. A dealbreaker hit on a candidate counts heavily against it even if everything else is fine for that person. Pick the ONE candidate that scores best across the whole group on all of these factors together. If there's a tie, prefer whichever candidate more people originally suggested in "suggested locations".
 
-Return the finalized destination, a one-to-two sentence reason citing budget fit, date overlap, and any relevant type/dealbreaker point, and per-participant budget_check and calendar_check lists. Only include a "note" when the answer is false/no — otherwise note should be null. Do not invent facts not implied by what's stated above.`;
+Return the finalized destination, a one-to-two sentence reason citing budget fit, date overlap, seasonal timing, and any relevant type/dealbreaker point, and per-participant budget_check and calendar_check lists. Only include a "note" when the answer is false/no — otherwise note should be null. Do not invent facts not implied by what's stated above.`;
 }
 
 export function isValidMatchResult(value: unknown, candidates: string[]): value is MatchResult {

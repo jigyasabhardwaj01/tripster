@@ -139,6 +139,24 @@ export default function SessionPage() {
       <ShareLink url={shareUrl} label="Share this link with the group" />
       <CountdownTimer deadline={view.deadline} onExpire={load} />
 
+      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="font-semibold">{view.submittedNames.length} submitted so far</p>
+        {view.submittedNames.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-700">
+            {view.submittedNames.map((n) => (
+              <li key={n} className="flex items-center gap-2">
+                <span className="text-green-600">✓</span>
+                {n}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
+          The trip won&apos;t be finalized — and nobody sees any result — until the deadline above passes. That&apos;s
+          intentional: it&apos;s what stops a single early vote from being treated as final.
+        </p>
+      </div>
+
       {alreadySubmitted ? (
         <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
           <p className="font-semibold text-brand-700">You&apos;re in ✅</p>
@@ -153,20 +171,6 @@ export default function SessionPage() {
         nameHint={myName === view.organizerName ? "you're the organizer — this is how the group will see you" : undefined}
         onSubmit={handleSubmit}
       />
-
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p className="font-semibold">{view.submittedNames.length} submitted so far</p>
-        {view.submittedNames.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-700">
-            {view.submittedNames.map((n) => (
-              <li key={n} className="flex items-center gap-2">
-                <span className="text-green-600">✓</span>
-                {n}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </main>
   );
 }
