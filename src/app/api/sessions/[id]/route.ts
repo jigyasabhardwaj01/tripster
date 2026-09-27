@@ -1,25 +1,16 @@
 import { NextResponse } from "next/server";
-import { loadSessionView } from "@/lib/sessionDb";
+import { loadSessionView, toApiResponse } from "@/lib/sessionDb";
 
 export const dynamic = "force-dynamic";
 
-// This is where "on-demand when the session page loads" lock + scoring
-// happens — see loadSessionView in lib/sessionDb.ts. Before lock, the
-// response contains only the deadline and who's submitted (name only).
-// After lock, it contains the AI-generated options — never raw submissions.
+// Read-only: no triggering happens here. Generation fires from the
+// submissions route (the moment the last expected participant submits) or
+// the organizer-action route (removing a non-responder can also close the
+// gate) — see lib/sessionDb.ts. Before the gate closes, this response
+// contains only the deadline and who's submitted (name only), never
+// preference data or recommendations.
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const view = await loadSessionView(params.id);
   if (!view) return NextResponse.json({ error: "Session not found" }, { status: 404 });
-
-  const { session, submittedNames, results, scoringFailed } = view;
-  return NextResponse.json({
-    id: session.id,
-    title: session.title,
-    organizerName: session.organizer_name,
-    deadline: session.deadline,
-    locked: session.locked,
-    submittedNames,
-    results: session.locked ? results?.options ?? null : null,
-    scoringFailed,
-  });
+  return NextResponse.json(toApiResponse(view));
 }

@@ -27,6 +27,18 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   cached = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // Next.js patches the global `fetch` and, by default, caches GET
+    // requests in its Data Cache keyed by URL — including ones made deep
+    // inside this library, independent of a route's `dynamic` setting. That
+    // silently served stale rows across requests in the same server
+    // process (found live: a session's status read back as "collecting"
+    // seconds after it had actually flipped to "complete"). Forcing
+    // `cache: "no-store"` on every request this client makes is what
+    // actually prevents it — `dynamic = "force-dynamic"` on the route
+    // alone was not enough.
+    global: {
+      fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }),
+    },
   });
   return cached;
 }

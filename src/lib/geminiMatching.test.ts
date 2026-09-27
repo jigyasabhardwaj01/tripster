@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCandidateList, isValidMatchResult, SubmissionForMatching } from "./geminiMatching";
+import { buildCandidateList, isValidRecommendationSet, Recommendation, SubmissionForMatching } from "./geminiMatching";
 
 function makeSubmission(overrides: Partial<SubmissionForMatching> = {}): SubmissionForMatching {
   return {
@@ -14,6 +14,23 @@ function makeSubmission(overrides: Partial<SubmissionForMatching> = {}): Submiss
   };
 }
 
+function makeRecommendation(overrides: Partial<Recommendation> = {}): Recommendation {
+  return {
+    destination: "Goa",
+    summary: "Good budget and date fit for the group.",
+    suggested_window: { start_date: "2026-11-01", end_date: "2026-11-10", season: "shoulder season" },
+    budget_estimate: {
+      transport: "₹3,000",
+      stay: "₹4,000",
+      food: "₹1,500",
+      activities: "₹2,000",
+      note: "estimated — not a verified price",
+    },
+    attractions: ["Baga Beach", "Fort Aguada", "Dudhsagar Falls"],
+    ...overrides,
+  };
+}
+
 describe("buildCandidateList", () => {
   it("merges preferred_locations across submissions, deduped case-insensitively", () => {
     const submissions = [
@@ -22,10 +39,7 @@ describe("buildCandidateList", () => {
     ];
     const candidates = buildCandidateList(submissions);
     expect(candidates).toHaveLength(3);
-    expect(candidates.map((c) => c.toLowerCase())).toEqual(
-      expect.arrayContaining(["goa", "manali", "gokarna"])
-    );
-    // first-seen casing is kept
+    expect(candidates.map((c) => c.toLowerCase())).toEqual(expect.arrayContaining(["goa", "manali", "gokarna"]));
     expect(candidates).toContain("Goa");
   });
 
@@ -49,52 +63,62 @@ describe("buildCandidateList", () => {
   });
 });
 
-describe("isValidMatchResult", () => {
+describe("isValidRecommendationSet", () => {
   const candidates = ["Goa", "Manali"];
 
-  it("accepts a well-formed result whose finalized_trip is one of the candidates", () => {
+  it("accepts a well-formed primary + alternative, both from the candidate list", () => {
     const result = {
-      finalized_trip: "Goa",
-      reason: "Best budget and date fit for everyone.",
-      budget_check: [{ name: "Karan", within_budget: true, note: null }],
-      calendar_check: [{ name: "Karan", dates_work: true, note: null }],
+      primary: makeRecommendation({ destination: "Goa" }),
+      alternative: makeRecommendation({ destination: "Manali" }),
     };
-    expect(isValidMatchResult(result, candidates)).toBe(true);
+    expect(isValidRecommendationSet(result, candidates)).toBe(true);
   });
 
-  it("accepts a candidate match regardless of casing", () => {
-    const result = {
-      finalized_trip: "goa",
-      reason: "fine",
-      budget_check: [],
-      calendar_check: [],
-    };
-    expect(isValidMatchResult(result, candidates)).toBe(true);
+  it("accepts a null alternative (single-candidate case)", () => {
+    const result = { primary: makeRecommendation({ destination: "Goa" }), alternative: null };
+    expect(isValidRecommendationSet(result, candidates)).toBe(true);
   });
 
-  it("rejects a finalized_trip that isn't in the candidate list — the model may not invent a place", () => {
-    const result = {
-      finalized_trip: "Paris",
-      reason: "fine",
-      budget_check: [],
-      calendar_check: [],
-    };
-    expect(isValidMatchResult(result, candidates)).toBe(false);
+  it("is case-insensitive when matching destinations to candidates", () => {
+    const result = { primary: makeRecommendation({ destination: "goa" }), alternative: null };
+    expect(isValidRecommendationSet(result, candidates)).toBe(true);
   });
 
-  it("rejects missing required fields", () => {
-    expect(isValidMatchResult({ finalized_trip: "Goa" }, candidates)).toBe(false);
-    expect(isValidMatchResult(null, candidates)).toBe(false);
-    expect(isValidMatchResult("Goa", candidates)).toBe(false);
+  it("rejects a primary destination that isn't in the candidate list — the model may not invent a place", () => {
+    const result = { primary: makeRecommendation({ destination: "Paris" }), alternative: null };
+    expect(isValidRecommendationSet(result, candidates)).toBe(false);
   });
 
-  it("rejects a budget_check entry missing within_budget", () => {
+  it("rejects an alternative that is just a renamed duplicate of primary", () => {
     const result = {
-      finalized_trip: "Goa",
-      reason: "fine",
-      budget_check: [{ name: "Karan" }],
-      calendar_check: [],
+      primary: makeRecommendation({ destination: "Goa" }),
+      alternative: makeRecommendation({ destination: "goa" }),
     };
-    expect(isValidMatchResult(result, candidates)).toBe(false);
+    expect(isValidRecommendationSet(result, candidates)).toBe(false);
+  });
+
+  it("rejects a missing budget_estimate field", () => {
+    const bad = makeRecommendation();
+    // @ts-expect-error deliberately malformed for the test
+    delete bad.budget_estimate;
+    expect(isValidRecommendationSet({ primary: bad, alternative: null }, candidates)).toBe(false);
+  });
+
+  it("rejects a missing suggested_window field", () => {
+    const bad = makeRecommendation();
+    // @ts-expect-error deliberately malformed for the test
+    delete bad.suggested_window;
+    expect(isValidRecommendationSet({ primary: bad, alternative: null }, candidates)).toBe(false);
+  });
+
+  it("rejects attractions that aren't an array of strings", () => {
+    const bad = { ...makeRecommendation(), attractions: "Baga Beach" };
+    expect(isValidRecommendationSet({ primary: bad, alternative: null }, candidates)).toBe(false);
+  });
+
+  it("rejects missing top-level fields", () => {
+    expect(isValidRecommendationSet({ primary: makeRecommendation() }, candidates)).toBe(false);
+    expect(isValidRecommendationSet(null, candidates)).toBe(false);
+    expect(isValidRecommendationSet("Goa", candidates)).toBe(false);
   });
 });

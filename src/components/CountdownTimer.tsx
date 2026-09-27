@@ -30,7 +30,7 @@ export default function CountdownTimer({
         countdown.expired ? "bg-gray-100 text-gray-600" : "bg-amber-50 text-amber-800"
       }`}
     >
-      {countdown.expired ? "Deadline passed — locking in results…" : countdown.label}
+      {countdown.expired ? "Target deadline passed — still waiting on submissions" : countdown.label}
     </p>
   );
 }

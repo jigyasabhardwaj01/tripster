@@ -17,17 +17,23 @@ export default function NewSessionPage() {
   const [title, setTitle] = useState("");
   const [organizerName, setOrganizerName] = useState("");
   const [deadlineLocal, setDeadlineLocal] = useState(defaultDeadlineLocal());
+  const [expectedParticipantCount, setExpectedParticipantCount] = useState("2");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const count = Number(expectedParticipantCount);
     if (!title.trim() || !organizerName.trim() || !deadlineLocal) return;
+    if (!Number.isInteger(count) || count < 1) {
+      setError("Enter how many people (including you) are expected — at least 1.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const deadlineIso = new Date(deadlineLocal).toISOString();
-      const { session } = await createSession(title.trim(), organizerName.trim(), deadlineIso);
+      const { session } = await createSession(title.trim(), organizerName.trim(), deadlineIso, count);
       addMySession({ sessionId: session.id, title: title.trim() });
       storeMyName(session.id, organizerName.trim());
       router.push(`/session/${session.id}`);
@@ -47,8 +53,8 @@ export default function NewSessionPage() {
       <div>
         <h1 className="text-2xl font-bold">Start a trip</h1>
         <p className="mt-1 text-sm text-gray-600">
-          You&apos;ll get one link to send the group. Everyone submits their budget, dates, and preferences until the
-          deadline — then AI picks one destination for the whole group.
+          You&apos;ll get one link to send the group. The moment everyone submits their budget, dates, and
+          preferences, AI picks a primary and an alternative destination for the whole group.
         </p>
       </div>
 
@@ -76,7 +82,24 @@ export default function NewSessionPage() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Submission deadline</span>
+          <span className="text-sm font-medium text-gray-700">How many people, including you?</span>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            className="rounded-lg border border-gray-300 px-3 py-2"
+            value={expectedParticipantCount}
+            onChange={(e) => setExpectedParticipantCount(e.target.value)}
+            required
+          />
+          <span className="text-xs text-gray-500">
+            The AI picks a destination the moment everyone submits — not before, and not automatically at the
+            deadline.
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-medium text-gray-700">Target deadline</span>
           <input
             type="datetime-local"
             className="rounded-lg border border-gray-300 px-3 py-2"
@@ -85,7 +108,8 @@ export default function NewSessionPage() {
             required
           />
           <span className="text-xs text-gray-500">
-            Defaults to 48 hours from now. Nobody sees results before this passes.
+            Defaults to 48 hours from now. This is a target for the group, not what triggers the result — if
+            someone&apos;s late, you can extend it or drop them from the count once it passes.
           </span>
         </label>
 

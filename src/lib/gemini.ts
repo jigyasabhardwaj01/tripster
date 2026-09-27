@@ -3,19 +3,18 @@ import {
   buildCandidateList,
   buildPrompt,
   GEMINI_RESPONSE_SCHEMA,
-  isValidMatchResult,
-  MatchResult,
+  isValidRecommendationSet,
+  RecommendationSet,
   SubmissionForMatching,
 } from "./geminiMatching";
 
-export type { SubmissionForMatching, MatchResult, BudgetCheck, CalendarCheck } from "./geminiMatching";
+export type { SubmissionForMatching, Recommendation, RecommendationSet, BudgetEstimate, SuggestedWindow } from "./geminiMatching";
 export { buildCandidateList } from "./geminiMatching";
 
-// The only matching logic in the app: one Gemini call at lock time that
-// picks a SINGLE finalized destination — not a ranked shortlist. The model
-// is constrained to candidates the group itself suggested (preferred_locations,
-// falling back to destination_types if nobody gave a location); it cannot
-// introduce a place nobody named. Pure prompt/validation logic lives in
+// The only matching logic in the app: one Gemini call at gate-close time
+// (submitted_count == expected_participant_count) that picks a primary and
+// an alternative destination — never a ranked list of more than two, never
+// a place nobody suggested. Pure prompt/validation logic lives in
 // geminiMatching.ts (see that file for why it's split out).
 
 async function callGeminiOnce(prompt: string): Promise<unknown> {
@@ -50,27 +49,28 @@ async function callGeminiOnce(prompt: string): Promise<unknown> {
 
 /**
  * Calls Gemini once; if the response isn't well-formed JSON matching
- * MatchResult (including "finalized_trip is actually one of the candidates"),
- * retries exactly once. Throws if both attempts fail — the caller
- * (sessionDb.ts) is responsible for surfacing that as an error state rather
- * than writing a partial/bad `results` row.
+ * RecommendationSet (including "destinations are actually candidates" and
+ * "alternative isn't a renamed primary"), retries exactly once. Throws if
+ * both attempts fail — the caller (sessionDb.ts) is responsible for
+ * surfacing that as recommendation_status "failed" rather than writing a
+ * partial/bad recommendations row.
  */
-export async function matchDestinations(submissions: SubmissionForMatching[]): Promise<MatchResult> {
+export async function generateRecommendations(submissions: SubmissionForMatching[]): Promise<RecommendationSet> {
   const candidates = buildCandidateList(submissions);
   if (candidates.length === 0) {
-    throw new Error("No candidate locations or destination types were submitted — nothing to finalize");
+    throw new Error("No candidate locations or destination types were submitted — nothing to recommend");
   }
   const prompt = buildPrompt(submissions, candidates);
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const parsed = await callGeminiOnce(prompt);
-      if (isValidMatchResult(parsed, candidates)) return parsed;
+      if (isValidRecommendationSet(parsed, candidates)) return parsed;
       console.error(`Gemini attempt ${attempt}: response failed shape/candidate validation`, parsed);
     } catch (err) {
       console.error(`Gemini attempt ${attempt} failed:`, err);
     }
   }
 
-  throw new Error("Gemini did not return a valid finalized trip after 2 attempts");
+  throw new Error("Gemini did not return a valid recommendation after 2 attempts");
 }

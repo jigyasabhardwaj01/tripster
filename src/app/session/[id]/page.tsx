@@ -1,13 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import CountdownTimer from "@/components/CountdownTimer";
-import FinalizedResult from "@/components/FinalizedResult";
+import RecommendationResults from "@/components/RecommendationResults";
 import ShareLink from "@/components/ShareLink";
 import SessionSubmissionForm, { SessionSubmissionFormValues } from "@/components/SessionSubmissionForm";
+import { supabase } from "@/lib/supabase";
 import { addMySession, getMyName, storeMyName } from "@/lib/mySessions";
-import { ApiError, getSessionView, retrySession, SessionViewResponse, submitResponse } from "@/lib/sessionClient";
+import {
+  ApiError,
+  extendDeadline,
+  getSessionView,
+  removeNonRespondingParticipant,
+  retrySession,
+  SessionViewResponse,
+  submitResponse,
+} from "@/lib/sessionClient";
 
 const MY_VALUES_KEY = (sessionId: string) => `tripster:session:${sessionId}:myValues`;
 
@@ -30,6 +39,12 @@ function storeMyValues(sessionId: string, values: SessionSubmissionFormValues) {
   }
 }
 
+function defaultExtendedDeadlineLocal(): string {
+  const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+}
+
 export default function SessionPage() {
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
@@ -39,6 +54,10 @@ export default function SessionPage() {
   const [notFound, setNotFound] = useState(false);
   const [justSubmitted, setJustSubmitted] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [deadlinePassed, setDeadlinePassed] = useState(false);
+  const [organizerActionPending, setOrganizerActionPending] = useState(false);
+  const [organizerActionError, setOrganizerActionError] = useState<string | null>(null);
+  const [extendDeadlineLocal, setExtendDeadlineLocal] = useState(defaultExtendedDeadlineLocal());
 
   const load = useCallback(async () => {
     try {
@@ -54,17 +73,35 @@ export default function SessionPage() {
 
   useEffect(() => {
     load();
-    // Poll while the session is still collecting, so the countdown, who's-
-    // submitted list, and (once the deadline passes) the finalized result
-    // all show up without a manual refresh.
+  }, [load]);
+
+  // Live "X of Y submitted" without a manual refresh: subscribe to the
+  // participants table (name + timestamp only — never preference data,
+  // that table has no anon read access) for this session, and just re-fetch
+  // the session view whenever it changes. A slow poll stays as a fallback
+  // in case Realtime isn't reachable (e.g. blocked websockets).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`session_participants:${sessionId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "session_participants", filter: `session_id=eq.${sessionId}` },
+        () => load()
+      )
+      .subscribe();
+
     const interval = setInterval(() => {
       setView((current) => {
-        if (current && !current.locked) load();
+        if (current && current.submissionStatus === "collecting") load();
         return current;
       });
     }, 20000);
-    return () => clearInterval(interval);
-  }, [load]);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [sessionId, load]);
 
   async function handleSubmit(values: SessionSubmissionFormValues) {
     await submitResponse(sessionId, values);
@@ -87,6 +124,44 @@ export default function SessionPage() {
     }
   }
 
+  async function handleExtendDeadline(e: React.FormEvent) {
+    e.preventDefault();
+    if (!extendDeadlineLocal) return;
+    setOrganizerActionPending(true);
+    setOrganizerActionError(null);
+    try {
+      const v = await extendDeadline(sessionId, new Date(extendDeadlineLocal).toISOString());
+      setView(v);
+      setDeadlinePassed(false);
+    } catch (err) {
+      setOrganizerActionError(err instanceof Error ? err.message : "Couldn't extend the deadline.");
+    } finally {
+      setOrganizerActionPending(false);
+    }
+  }
+
+  async function handleRemoveParticipant() {
+    setOrganizerActionPending(true);
+    setOrganizerActionError(null);
+    try {
+      const v = await removeNonRespondingParticipant(sessionId);
+      setView(v);
+    } catch (err) {
+      setOrganizerActionError(err instanceof Error ? err.message : "Couldn't update the participant count.");
+    } finally {
+      setOrganizerActionPending(false);
+    }
+  }
+
+  const myName = getMyName(sessionId);
+  const alreadySubmitted = useMemo(
+    () => justSubmitted || (view && myName ? view.submittedNames.includes(myName) : false),
+    [justSubmitted, view, myName]
+  );
+  const isOrganizer = view != null && myName === view.organizerName;
+  const remainingCount = view ? Math.max(view.expectedParticipantCount - view.submittedCount, 0) : 0;
+  const showOrganizerActions = view != null && !view.locked && deadlinePassed && remainingCount > 0;
+
   if (loading) return <main className="flex flex-1 items-center justify-center text-gray-500">Loading…</main>;
   if (notFound || !view)
     return (
@@ -97,8 +172,6 @@ export default function SessionPage() {
     );
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/session/${sessionId}` : "";
-  const myName = getMyName(sessionId);
-  const alreadySubmitted = justSubmitted || (myName ? view.submittedNames.includes(myName) : false);
 
   if (view.locked) {
     return (
@@ -108,9 +181,9 @@ export default function SessionPage() {
           <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
         </div>
 
-        {view.results && <FinalizedResult result={view.results} />}
+        {view.recommendations && <RecommendationResults recommendations={view.recommendations} />}
 
-        {view.scoringFailed && (
+        {view.recommendationFailed && (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
             <p className="font-semibold text-red-700">Something went wrong finalizing this trip</p>
             <p className="text-sm text-gray-600">
@@ -125,6 +198,12 @@ export default function SessionPage() {
             </button>
           </div>
         )}
+
+        {!view.recommendations && !view.recommendationFailed && (
+          <p className="rounded-2xl border border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
+            Everyone&apos;s submitted — finalizing your trip…
+          </p>
+        )}
       </main>
     );
   }
@@ -137,10 +216,12 @@ export default function SessionPage() {
       </div>
 
       <ShareLink url={shareUrl} label="Share this link with the group" />
-      <CountdownTimer deadline={view.deadline} onExpire={load} />
+      <CountdownTimer deadline={view.deadline} onExpire={() => setDeadlinePassed(true)} />
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <p className="font-semibold">{view.submittedNames.length} submitted so far</p>
+        <p className="font-semibold">
+          {view.submittedCount} of {view.expectedParticipantCount} submitted
+        </p>
         {view.submittedNames.length > 0 && (
           <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-700">
             {view.submittedNames.map((n) => (
@@ -152,23 +233,59 @@ export default function SessionPage() {
           </ul>
         )}
         <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          The trip won&apos;t be finalized — and nobody sees any result — until the deadline above passes. That&apos;s
-          intentional: it&apos;s what stops a single early vote from being treated as final.
+          The trip is finalized — and nobody sees any result — the moment everyone above has submitted. That&apos;s
+          intentional: it&apos;s what stops a single early vote from being treated as final. The deadline is just a
+          target, not what triggers it.
         </p>
       </div>
+
+      {showOrganizerActions && isOrganizer && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-800">
+            The deadline passed with {remainingCount} {remainingCount === 1 ? "person" : "people"} still to submit.
+          </p>
+          <p className="text-xs text-gray-600">
+            Nothing happens automatically — pick one: extend the deadline, or drop a non-responding person from the
+            expected count (this can finalize the trip immediately if everyone else has submitted).
+          </p>
+          <form onSubmit={handleExtendDeadline} className="flex flex-wrap items-center gap-2">
+            <input
+              type="datetime-local"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={extendDeadlineLocal}
+              onChange={(e) => setExtendDeadlineLocal(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={organizerActionPending}
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              Extend deadline
+            </button>
+          </form>
+          <button
+            onClick={handleRemoveParticipant}
+            disabled={organizerActionPending}
+            className="self-start rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-800 disabled:opacity-60"
+          >
+            Remove one non-responding participant
+          </button>
+          {organizerActionError && <p className="text-xs text-red-600">{organizerActionError}</p>}
+        </div>
+      )}
 
       {alreadySubmitted ? (
         <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
           <p className="font-semibold text-brand-700">You&apos;re in ✅</p>
           <p className="mt-1 text-sm text-gray-600">
-            Thanks{myName ? `, ${myName}` : ""}. You can still edit your answer below until the deadline.
+            Thanks{myName ? `, ${myName}` : ""}. You can still edit your answer below until everyone&apos;s submitted.
           </p>
         </div>
       ) : null}
 
       <SessionSubmissionForm
         initialValues={loadMyValues(sessionId) ?? (myName ? { name: myName } : undefined)}
-        nameHint={myName === view.organizerName ? "you're the organizer — this is how the group will see you" : undefined}
+        nameHint={isOrganizer ? "you're the organizer — this is how the group will see you" : undefined}
         onSubmit={handleSubmit}
       />
     </main>

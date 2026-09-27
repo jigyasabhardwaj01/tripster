@@ -1,9 +1,11 @@
 "use client";
 
 // Thin fetch wrappers around /api/sessions/**. This system never talks to
-// Supabase directly from the browser — everything is mediated by the API
-// routes using the service-role key (see lib/supabaseAdmin.ts), which is
-// what makes pre-lock visibility rules actually enforceable.
+// Supabase directly for preference data or recommendations — those are
+// mediated by the API routes using the service-role key (see
+// lib/supabaseAdmin.ts). The one exception is the `participants` table
+// (name + timestamp only, never preferences), which is safe to read
+// directly via Realtime — see lib/supabase.ts.
 
 export interface DateRangeInput {
   start_date: string;
@@ -20,34 +22,49 @@ export interface SubmissionInput {
   dealbreakers: string;
 }
 
-export interface BudgetCheck {
-  name: string;
-  within_budget: boolean;
-  note: string | null;
+export interface BudgetEstimate {
+  transport: string;
+  stay: string;
+  food: string;
+  activities: string;
+  note: string;
 }
 
-export interface CalendarCheck {
-  name: string;
-  dates_work: boolean;
-  note: string | null;
+export interface SuggestedWindow {
+  start_date: string;
+  end_date: string;
+  season: string;
 }
 
-export interface FinalizedResult {
-  finalized_trip: string;
-  reason: string;
-  budget_check: BudgetCheck[];
-  calendar_check: CalendarCheck[];
+export interface Recommendation {
+  destination: string;
+  summary: string;
+  suggested_window: SuggestedWindow;
+  budget_estimate: BudgetEstimate;
+  attractions: string[];
 }
+
+export interface RecommendationsResponse {
+  primary: Recommendation;
+  alternative: Recommendation | null;
+}
+
+export type SubmissionStatus = "collecting" | "ready_for_analysis" | "generating" | "complete";
+export type RecommendationStatus = "not_started" | "in_progress" | "complete" | "failed";
 
 export interface SessionViewResponse {
   id: string;
   title: string;
   organizerName: string;
   deadline: string;
+  expectedParticipantCount: number;
+  submissionStatus: SubmissionStatus;
+  recommendationStatus: RecommendationStatus;
   locked: boolean;
   submittedNames: string[];
-  results: FinalizedResult | null;
-  scoringFailed: boolean;
+  submittedCount: number;
+  recommendations: RecommendationsResponse | null;
+  recommendationFailed: boolean;
 }
 
 export class ApiError extends Error {
@@ -72,12 +89,13 @@ async function parseJsonOrThrow(res: Response) {
 export async function createSession(
   title: string,
   organizerName: string,
-  deadlineIso: string
+  deadlineIso: string,
+  expectedParticipantCount: number
 ): Promise<{ session: { id: string } }> {
   const res = await fetch("/api/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title, organizerName, deadline: deadlineIso }),
+    body: JSON.stringify({ title, organizerName, deadline: deadlineIso, expectedParticipantCount }),
   });
   return parseJsonOrThrow(res);
 }
@@ -99,5 +117,23 @@ export async function submitResponse(sessionId: string, input: SubmissionInput):
 
 export async function retrySession(sessionId: string): Promise<SessionViewResponse> {
   const res = await fetch(`/api/sessions/${sessionId}/retry`, { method: "POST" });
+  return parseJsonOrThrow(res);
+}
+
+export async function extendDeadline(sessionId: string, deadlineIso: string): Promise<SessionViewResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/organizer-action`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "extend_deadline", deadline: deadlineIso }),
+  });
+  return parseJsonOrThrow(res);
+}
+
+export async function removeNonRespondingParticipant(sessionId: string): Promise<SessionViewResponse> {
+  const res = await fetch(`/api/sessions/${sessionId}/organizer-action`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "remove_participant" }),
+  });
   return parseJsonOrThrow(res);
 }
