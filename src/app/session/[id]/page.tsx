@@ -196,7 +196,15 @@ export default function SessionPage() {
         )}
 
         {view.recommendations && (
-          <RecommendationResults recommendations={view.recommendations} />
+          <>
+            <RecommendationResults recommendations={view.recommendations} />
+            <a
+              href={`/api/sessions/${sessionId}/itinerary`}
+              className="self-center rounded-xl border border-brand-200 bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 shadow-sm"
+            >
+              Download itinerary (PDF)
+            </a>
+          </>
         )}
 
         {view.recommendationFailed && (

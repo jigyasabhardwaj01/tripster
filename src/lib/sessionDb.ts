@@ -2,6 +2,8 @@ import "server-only";
 import { getSupabaseAdmin } from "./supabaseAdmin";
 import { generateDiscovered, generateFromPicks, Recommendation, SubmissionForMatching } from "./gemini";
 import { DateRange, validateDateRanges } from "./dateRangeValidation";
+import { buildItineraryPdfData } from "./itineraryPdfData";
+import { renderItineraryPdf } from "./itineraryPdf";
 import {
   computeDeadline,
   computeMissingNames,
@@ -11,6 +13,8 @@ import {
   shouldCloseGate,
   SubmissionStatus,
 } from "./sessionGate";
+
+const ITINERARY_BUCKET = "itineraries";
 
 export type { DateRange } from "./dateRangeValidation";
 export { InvalidDateRangeError } from "./dateRangeValidation";
@@ -28,6 +32,7 @@ export interface Session {
   missing_names: string[] | null; // set once generation runs, only if expected_names was given
   submission_status: SubmissionStatus;
   recommendation_status: RecommendationStatus;
+  itinerary_pdf_path: string | null; // storage object path, set once the combined PDF has been generated
 }
 
 export interface Submission {
@@ -311,6 +316,15 @@ async function runGenerationAndSave(sessionId: string): Promise<void> {
       .from("sessions")
       .update({ submission_status: "complete", recommendation_status: "complete" })
       .eq("id", sessionId);
+
+    // Best-effort: a PDF failure must never undo an otherwise-successful
+    // generation. If this fails, ensureItineraryPdf's lazy path on first
+    // download retries it exactly once more.
+    try {
+      await ensureItineraryPdf(sessionId);
+    } catch (pdfErr) {
+      console.error(`Itinerary PDF generation failed for session ${sessionId}:`, pdfErr);
+    }
   } catch (err) {
     // submission_status stays "generating" (the gate has genuinely closed —
     // we do not reopen it or accept new submissions) but recommendation_status
@@ -428,6 +442,50 @@ export async function removeNonRespondingParticipant(sessionId: string): Promise
   // instead of waiting for another event.
   await tryCloseGateAndGenerate(sessionId);
   return loadSessionView(sessionId);
+}
+
+/**
+ * Generates the combined-itinerary PDF exactly once and caches it in
+ * Supabase Storage — every call after the first just downloads the saved
+ * file. Never triggers a new AI call: it only renders recommendation data
+ * that's already been generated and saved. Returns null when the trip
+ * isn't complete yet (nothing to render).
+ */
+export async function ensureItineraryPdf(sessionId: string): Promise<Buffer | null> {
+  const session = await getSession(sessionId);
+  if (!session || session.submission_status !== "complete") return null;
+
+  if (session.itinerary_pdf_path) {
+    const { data, error } = await getSupabaseAdmin().storage.from(ITINERARY_BUCKET).download(session.itinerary_pdf_path);
+    if (!error && data) return Buffer.from(await data.arrayBuffer());
+    console.error(`Stored itinerary PDF unreadable for session ${sessionId}, regenerating:`, error);
+  }
+
+  const recommendations = await getRecommendations(sessionId);
+  if (!recommendations) return null;
+  const pdfData = buildItineraryPdfData(
+    {
+      title: session.title,
+      expectedParticipantCount: session.expected_participant_count,
+      includedCount: session.included_count,
+      missingNames: session.missing_names,
+    },
+    recommendations
+  );
+  if (!pdfData) return null;
+
+  const buffer = await renderItineraryPdf(pdfData);
+  const path = `${sessionId}/itinerary.pdf`;
+  const { error: uploadError } = await getSupabaseAdmin()
+    .storage.from(ITINERARY_BUCKET)
+    .upload(path, buffer, { contentType: "application/pdf", upsert: true });
+  if (uploadError) {
+    console.error(`Itinerary PDF upload failed for session ${sessionId}:`, uploadError);
+    return buffer; // still hand back the freshly rendered bytes even if caching to storage failed
+  }
+
+  await getSupabaseAdmin().from("sessions").update({ itinerary_pdf_path: path }).eq("id", sessionId);
+  return buffer;
 }
 
 /** Shared shape for every API route that returns a session view. */
