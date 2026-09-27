@@ -3,37 +3,51 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addMySession, storeMyName } from "@/lib/mySessions";
-import { ApiError, createSession } from "@/lib/sessionClient";
-
-function defaultDeadlineLocal(): string {
-  // Datetime-local input wants "YYYY-MM-DDTHH:mm" in the browser's local time.
-  const d = new Date(Date.now() + 48 * 60 * 60 * 1000);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
+import { ApiError, createSession, DurationUnit } from "@/lib/sessionClient";
 
 export default function NewSessionPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [organizerName, setOrganizerName] = useState("");
-  const [deadlineLocal, setDeadlineLocal] = useState(defaultDeadlineLocal());
+  const [durationValue, setDurationValue] = useState("48");
+  const [durationUnit, setDurationUnit] = useState<DurationUnit>("hours");
   const [expectedParticipantCount, setExpectedParticipantCount] = useState("2");
+  const [namesText, setNamesText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const names = namesText
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const usingNamedList = names.length > 0;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const count = Number(expectedParticipantCount);
-    if (!title.trim() || !organizerName.trim() || !deadlineLocal) return;
+    setError(null);
+
+    const duration = Number(durationValue);
+    if (!title.trim() || !organizerName.trim()) return;
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setError("Enter how long the trip stays open — a positive number.");
+      return;
+    }
+    const count = usingNamedList ? names.length : Number(expectedParticipantCount);
     if (!Number.isInteger(count) || count < 1) {
       setError("Enter how many people (including you) are expected — at least 1.");
       return;
     }
+
     setSubmitting(true);
-    setError(null);
     try {
-      const deadlineIso = new Date(deadlineLocal).toISOString();
-      const { session } = await createSession(title.trim(), organizerName.trim(), deadlineIso, count);
+      const { session } = await createSession(
+        title.trim(),
+        organizerName.trim(),
+        duration,
+        durationUnit,
+        count,
+        usingNamedList ? names : null
+      );
       addMySession({ sessionId: session.id, title: title.trim() });
       storeMyName(session.id, organizerName.trim());
       router.push(`/session/${session.id}`);
@@ -53,8 +67,8 @@ export default function NewSessionPage() {
       <div>
         <h1 className="text-2xl font-bold">Start a trip</h1>
         <p className="mt-1 text-sm text-gray-600">
-          You&apos;ll get one link to send the group. The moment everyone submits their budget, dates, and
-          preferences, AI picks a primary and an alternative destination for the whole group.
+          You&apos;ll get one link to send the group. AI picks a destination the moment everyone submits — or, if the
+          trip window runs out first, from whoever did.
         </p>
       </div>
 
@@ -82,36 +96,66 @@ export default function NewSessionPage() {
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">How many people, including you?</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            value={expectedParticipantCount}
-            onChange={(e) => setExpectedParticipantCount(e.target.value)}
-            required
-          />
+          <span className="text-sm font-medium text-gray-700">Trip window stays open for</span>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              className="w-24 rounded-lg border border-gray-300 px-3 py-2"
+              value={durationValue}
+              onChange={(e) => setDurationValue(e.target.value)}
+              required
+            />
+            <select
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              value={durationUnit}
+              onChange={(e) => setDurationUnit(e.target.value as DurationUnit)}
+            >
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+            </select>
+          </div>
           <span className="text-xs text-gray-500">
-            The AI picks a destination the moment everyone submits — not before, and not automatically at the
-            deadline.
+            A hard cutoff, not just a target: the deadline is created_at + this duration. Generation fires the
+            moment everyone submits, or when this runs out with at least one response in — whichever comes first.
+            5 minutes is fine for testing.
           </span>
         </label>
 
         <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Target deadline</span>
+          <span className="text-sm font-medium text-gray-700">
+            Who&apos;s coming? <span className="font-normal text-gray-400">(optional, comma-separated)</span>
+          </span>
           <input
-            type="datetime-local"
             className="rounded-lg border border-gray-300 px-3 py-2"
-            value={deadlineLocal}
-            onChange={(e) => setDeadlineLocal(e.target.value)}
-            required
+            placeholder="e.g. Karan, Priya, Rahul"
+            value={namesText}
+            onChange={(e) => setNamesText(e.target.value)}
           />
           <span className="text-xs text-gray-500">
-            Defaults to 48 hours from now. This is a target for the group, not what triggers the result — if
-            someone&apos;s late, you can extend it or drop them from the count once it passes.
+            {usingNamedList
+              ? `Expecting ${names.length} ${names.length === 1 ? "person" : "people"} — if the deadline hits early, we can name exactly who didn't make it.`
+              : "Leave blank to just set a headcount below — if the deadline hits early, we'll only be able to say how many were missing, not who."}
           </span>
         </label>
+
+        {!usingNamedList && (
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium text-gray-700">How many people, including you?</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="rounded-lg border border-gray-300 px-3 py-2"
+              value={expectedParticipantCount}
+              onChange={(e) => setExpectedParticipantCount(e.target.value)}
+              required
+            />
+          </label>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 

@@ -45,12 +45,14 @@ export interface Recommendation {
 }
 
 export interface RecommendationsResponse {
-  primary: Recommendation;
-  alternative: Recommendation | null;
+  fromPicks: Recommendation | null;
+  discovered: Recommendation | null;
+  discoveredVerified: boolean;
 }
 
 export type SubmissionStatus = "collecting" | "ready_for_analysis" | "generating" | "complete";
 export type RecommendationStatus = "not_started" | "in_progress" | "complete" | "failed";
+export type DurationUnit = "minutes" | "hours" | "days";
 
 export interface SessionViewResponse {
   id: string;
@@ -63,6 +65,8 @@ export interface SessionViewResponse {
   locked: boolean;
   submittedNames: string[];
   submittedCount: number;
+  includedCount: number | null;
+  missingNames: string[] | null;
   recommendations: RecommendationsResponse | null;
   recommendationFailed: boolean;
 }
@@ -89,13 +93,15 @@ async function parseJsonOrThrow(res: Response) {
 export async function createSession(
   title: string,
   organizerName: string,
-  deadlineIso: string,
-  expectedParticipantCount: number
+  durationValue: number,
+  durationUnit: DurationUnit,
+  expectedParticipantCount: number,
+  expectedNames: string[] | null
 ): Promise<{ session: { id: string } }> {
   const res = await fetch("/api/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title, organizerName, deadline: deadlineIso, expectedParticipantCount }),
+    body: JSON.stringify({ title, organizerName, durationValue, durationUnit, expectedParticipantCount, expectedNames }),
   });
   return parseJsonOrThrow(res);
 }
@@ -120,11 +126,15 @@ export async function retrySession(sessionId: string): Promise<SessionViewRespon
   return parseJsonOrThrow(res);
 }
 
-export async function extendDeadline(sessionId: string, deadlineIso: string): Promise<SessionViewResponse> {
+export async function extendDeadline(
+  sessionId: string,
+  durationValue: number,
+  durationUnit: DurationUnit
+): Promise<SessionViewResponse> {
   const res = await fetch(`/api/sessions/${sessionId}/organizer-action`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ action: "extend_deadline", deadline: deadlineIso }),
+    body: JSON.stringify({ action: "extend_deadline", durationValue, durationUnit }),
   });
   return parseJsonOrThrow(res);
 }

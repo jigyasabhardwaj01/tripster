@@ -1,8 +1,16 @@
 import "server-only";
 import { getSupabaseAdmin } from "./supabaseAdmin";
-import { generateRecommendations, RecommendationSet, SubmissionForMatching } from "./gemini";
+import { generateDiscovered, generateFromPicks, Recommendation, SubmissionForMatching } from "./gemini";
 import { DateRange, validateDateRanges } from "./dateRangeValidation";
-import { decrementExpectedParticipantCount, RecommendationStatus, shouldCloseGate, SubmissionStatus } from "./sessionGate";
+import {
+  computeDeadline,
+  computeMissingNames,
+  decrementExpectedParticipantCount,
+  DurationUnit,
+  RecommendationStatus,
+  shouldCloseGate,
+  SubmissionStatus,
+} from "./sessionGate";
 
 export type { DateRange } from "./dateRangeValidation";
 export { InvalidDateRangeError } from "./dateRangeValidation";
@@ -11,10 +19,13 @@ export interface Session {
   id: string;
   title: string;
   organizer_name: string;
-  deadline: string; // informational only — never triggers generation
+  deadline: string; // hard cutoff: generation fires here even if some are still missing, as long as >=1 submitted
   created_at: string;
   locked: boolean;
   expected_participant_count: number;
+  expected_names: string[] | null; // optional — only set if the organizer listed names at creation
+  included_count: number | null; // set once generation runs: how many were actually included
+  missing_names: string[] | null; // set once generation runs, only if expected_names was given
   submission_status: SubmissionStatus;
   recommendation_status: RecommendationStatus;
 }
@@ -33,9 +44,7 @@ export interface Submission {
 }
 
 export class SessionLockedError extends Error {
-  constructor(
-    message = "Submissions for this trip are closed — every expected participant has already submitted."
-  ) {
+  constructor(message = "Submissions for this trip are closed — recommendations have already been generated.") {
     super(message);
     this.name = "SessionLockedError";
   }
@@ -45,7 +54,8 @@ export async function createSession(
   title: string,
   organizerName: string,
   deadlineIso: string,
-  expectedParticipantCount: number
+  expectedParticipantCount: number,
+  expectedNames: string[] | null
 ): Promise<Session> {
   const { data, error } = await getSupabaseAdmin()
     .from("sessions")
@@ -54,6 +64,7 @@ export async function createSession(
       organizer_name: organizerName,
       deadline: deadlineIso,
       expected_participant_count: expectedParticipantCount,
+      expected_names: expectedNames,
     })
     .select()
     .single();
@@ -98,34 +109,32 @@ async function listSubmissions(sessionId: string): Promise<Submission[]> {
 }
 
 export interface RecommendationsRow {
-  primary: RecommendationSet["primary"];
-  alternative: RecommendationSet["alternative"];
+  fromPicks: Recommendation | null;
+  discovered: Recommendation | null;
+  discoveredVerified: boolean;
 }
 
 export async function getRecommendations(sessionId: string): Promise<RecommendationsRow | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("recommendations")
-    .select()
-    .eq("session_id", sessionId);
+  const { data, error } = await getSupabaseAdmin().from("recommendations").select().eq("session_id", sessionId);
   if (error) throw error;
-  const rows = data as { recommendation_type: "primary" | "alternative"; [k: string]: unknown }[];
+  const rows = data as { recommendation_type: "from_picks" | "discovered"; verified: boolean; [k: string]: unknown }[];
   if (rows.length === 0) return null;
 
-  const primaryRow = rows.find((r) => r.recommendation_type === "primary");
-  const alternativeRow = rows.find((r) => r.recommendation_type === "alternative");
-  if (!primaryRow) return null;
+  const fromPicksRow = rows.find((r) => r.recommendation_type === "from_picks");
+  const discoveredRow = rows.find((r) => r.recommendation_type === "discovered");
 
-  const toRecommendation = (r: typeof primaryRow) => ({
+  const toRecommendation = (r: NonNullable<typeof fromPicksRow>): Recommendation => ({
     destination: r.destination as string,
     summary: r.summary as string,
-    suggested_window: r.suggested_window as RecommendationSet["primary"]["suggested_window"],
-    budget_estimate: r.budget_estimate as RecommendationSet["primary"]["budget_estimate"],
+    suggested_window: r.suggested_window as Recommendation["suggested_window"],
+    budget_estimate: r.budget_estimate as Recommendation["budget_estimate"],
     attractions: r.attractions as string[],
   });
 
   return {
-    primary: toRecommendation(primaryRow),
-    alternative: alternativeRow ? toRecommendation(alternativeRow) : null,
+    fromPicks: fromPicksRow ? toRecommendation(fromPicksRow) : null,
+    discovered: discoveredRow ? toRecommendation(discoveredRow) : null,
+    discoveredVerified: discoveredRow?.verified ?? false,
   };
 }
 
@@ -141,8 +150,11 @@ export interface UpsertSubmissionInput {
 
 /**
  * Throws SessionLockedError once the gate has closed (submission_status is
- * no longer "collecting") — the deadline never blocks this, only the gate
- * does. Throws InvalidDateRangeError if any range is bad.
+ * no longer "collecting"). A submission arriving after the deadline has
+ * already passed is still accepted right up until that moment — per spec,
+ * a late arrival can itself be the trigger that closes the gate (condition
+ * b: deadline passed + at least one submission). Throws
+ * InvalidDateRangeError if any range is bad.
  */
 export async function upsertSubmission(sessionId: string, input: UpsertSubmissionInput): Promise<Submission> {
   const session = await getSession(sessionId);
@@ -189,7 +201,7 @@ export async function upsertSubmission(sessionId: string, input: UpsertSubmissio
   return data as Submission;
 }
 
-/** Mirrors the submissions upsert into the minimal, publicly-readable participants table. */
+/** Mirrors the submissions upsert into the minimal, publicly-readable session_participants table. */
 async function upsertParticipant(sessionId: string, name: string): Promise<void> {
   const { data: existing, error: findErr } = await getSupabaseAdmin()
     .from("session_participants")
@@ -221,12 +233,13 @@ function toMatchingInput(s: Submission): SubmissionForMatching {
 
 /**
  * The DB-level guard against firing generation twice under simultaneous
- * submissions: this UPDATE only ever succeeds for the one caller who
- * observes submission_status still "collecting" AND the count condition
- * true at the moment Postgres evaluates+commits the row lock — Postgres
- * serializes concurrent UPDATEs to the same row, so a second concurrent
- * caller's WHERE clause re-evaluates against the already-flipped row and
- * matches zero rows.
+ * submissions (or a submission racing the deadline): this UPDATE only ever
+ * succeeds for the one caller who observes submission_status still
+ * "collecting" AND (everyone's in OR the deadline has passed with >=1
+ * submitted) at the moment Postgres evaluates+commits the row lock —
+ * Postgres serializes concurrent UPDATEs to the same row, so a second
+ * concurrent caller's WHERE clause re-evaluates against the already-flipped
+ * row and matches zero rows.
  */
 async function claimGate(sessionId: string): Promise<boolean> {
   const { data, error } = await getSupabaseAdmin().rpc("claim_session_gate", { p_session_id: sessionId });
@@ -238,29 +251,53 @@ async function tryCloseGateAndGenerate(sessionId: string): Promise<void> {
   const session = await getSession(sessionId);
   if (!session) return;
   const submittedCount = await countParticipants(sessionId);
-  if (!shouldCloseGate(submittedCount, session.expected_participant_count, session.submission_status)) return;
+  const deadlinePassed = new Date(session.deadline).getTime() <= Date.now();
+  if (!shouldCloseGate(submittedCount, session.expected_participant_count, session.submission_status, deadlinePassed)) {
+    return;
+  }
 
   const claimed = await claimGate(sessionId);
-  if (!claimed) return; // another concurrent caller already claimed it, or the count changed since our read
+  if (!claimed) return; // another concurrent caller already claimed it, or the condition no longer holds
 
   await runGenerationAndSave(sessionId);
 }
 
 async function runGenerationAndSave(sessionId: string): Promise<void> {
+  const session = await getSession(sessionId);
+  if (!session) return;
+
+  const submittedNames = await listParticipantNames(sessionId);
+  const missingNames = computeMissingNames(session.expected_names, submittedNames);
+
   await getSupabaseAdmin()
     .from("sessions")
-    .update({ submission_status: "generating", recommendation_status: "in_progress" })
+    .update({
+      submission_status: "generating",
+      recommendation_status: "in_progress",
+      included_count: submittedNames.length,
+      missing_names: missingNames,
+    })
     .eq("id", sessionId);
 
   try {
     const submissions = await listSubmissions(sessionId);
-    const result = await generateRecommendations(submissions.map(toMatchingInput));
+    const matchingInputs = submissions.map(toMatchingInput);
+
+    const [fromPicks, discoveredResult] = await Promise.all([
+      generateFromPicks(matchingInputs),
+      generateDiscovered(matchingInputs),
+    ]);
 
     const rows = [
-      { session_id: sessionId, recommendation_type: "primary" as const, ...toRecommendationRow(result.primary) },
-      ...(result.alternative
-        ? [{ session_id: sessionId, recommendation_type: "alternative" as const, ...toRecommendationRow(result.alternative) }]
+      ...(fromPicks
+        ? [{ session_id: sessionId, recommendation_type: "from_picks" as const, verified: true, ...toRecommendationRow(fromPicks) }]
         : []),
+      {
+        session_id: sessionId,
+        recommendation_type: "discovered" as const,
+        verified: discoveredResult.verified,
+        ...toRecommendationRow(discoveredResult.recommendation),
+      },
     ];
 
     // Upsert (not insert) — a retry after a prior failed attempt must
@@ -284,7 +321,7 @@ async function runGenerationAndSave(sessionId: string): Promise<void> {
   }
 }
 
-function toRecommendationRow(r: RecommendationSet["primary"]) {
+function toRecommendationRow(r: Recommendation) {
   return {
     destination: r.destination,
     summary: r.summary,
@@ -306,17 +343,25 @@ export async function loadSessionView(sessionId: string): Promise<SessionView | 
   const session = await getSession(sessionId);
   if (!session) return null;
 
+  // The deadline is a real trigger now (condition b), and nothing else
+  // polls for it — a page load (or a fresh submission, or an organizer
+  // action) is what actually notices it has passed and closes the gate.
+  if (session.submission_status === "collecting") {
+    await tryCloseGateAndGenerate(sessionId);
+  }
+
+  const freshSession = (await getSession(sessionId)) ?? session;
   const [submittedNames, recommendations] = await Promise.all([
     listParticipantNames(sessionId),
-    session.submission_status === "complete" ? getRecommendations(sessionId) : Promise.resolve(null),
+    freshSession.submission_status === "complete" ? getRecommendations(sessionId) : Promise.resolve(null),
   ]);
 
   return {
-    session,
+    session: freshSession,
     submittedNames,
     submittedCount: submittedNames.length,
     recommendations,
-    recommendationFailed: session.recommendation_status === "failed",
+    recommendationFailed: freshSession.recommendation_status === "failed",
   };
 }
 
@@ -337,17 +382,28 @@ export async function retryGeneration(sessionId: string): Promise<SessionView | 
 }
 
 /**
- * Organizer-only actions for a session whose deadline has passed with
- * submissions still missing. Neither of these fires automatically — see
- * sessionGate.ts's computeGateState for the flag the frontend uses to
- * decide when to offer them.
+ * Organizer actions, available any time pre-lock: extend the deadline
+ * (more time before the hard cutoff forces a partial result), or drop a
+ * non-responder so the "everyone's in" condition can close the gate early
+ * without waiting for the deadline.
  */
-export async function extendDeadline(sessionId: string, newDeadlineIso: string): Promise<SessionView | null> {
+export async function extendDeadline(
+  sessionId: string,
+  durationValue: number,
+  durationUnit: DurationUnit
+): Promise<SessionView | null> {
   const session = await getSession(sessionId);
   if (!session) return null;
   if (session.submission_status !== "collecting") return loadSessionView(sessionId);
 
-  const { error } = await getSupabaseAdmin().from("sessions").update({ deadline: newDeadlineIso }).eq("id", sessionId);
+  // Extends from the CURRENT deadline, not from now — "add 30 more minutes"
+  // means 30 minutes later than it was already set to, not 30 minutes from
+  // whenever the organizer happens to click the button.
+  const newDeadline = computeDeadline(new Date(session.deadline), durationValue, durationUnit);
+  const { error } = await getSupabaseAdmin()
+    .from("sessions")
+    .update({ deadline: newDeadline.toISOString() })
+    .eq("id", sessionId);
   if (error) throw error;
   return loadSessionView(sessionId);
 }
@@ -366,9 +422,10 @@ export async function removeNonRespondingParticipant(sessionId: string): Promise
     .eq("id", sessionId);
   if (error) throw error;
 
-  // This is the one case besides a fresh submission that can close the
-  // gate — re-check right away so removing the last non-responder actually
-  // triggers generation instead of waiting for another submission.
+  // This is the one case besides a fresh submission (or the deadline
+  // itself, on the next read) that can close the gate — re-check right
+  // away so removing the last non-responder actually triggers generation
+  // instead of waiting for another event.
   await tryCloseGateAndGenerate(sessionId);
   return loadSessionView(sessionId);
 }
@@ -387,6 +444,8 @@ export function toApiResponse(view: SessionView) {
     locked: session.submission_status !== "collecting",
     submittedNames: view.submittedNames,
     submittedCount: view.submittedCount,
+    includedCount: session.included_count,
+    missingNames: session.missing_names,
     recommendations: session.submission_status === "complete" ? view.recommendations : null,
     recommendationFailed: view.recommendationFailed,
   };

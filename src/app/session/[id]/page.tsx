@@ -10,6 +10,7 @@ import { supabase } from "@/lib/supabase";
 import { addMySession, getMyName, storeMyName } from "@/lib/mySessions";
 import {
   ApiError,
+  DurationUnit,
   extendDeadline,
   getSessionView,
   removeNonRespondingParticipant,
@@ -39,12 +40,6 @@ function storeMyValues(sessionId: string, values: SessionSubmissionFormValues) {
   }
 }
 
-function defaultExtendedDeadlineLocal(): string {
-  const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
-
 export default function SessionPage() {
   const params = useParams<{ id: string }>();
   const sessionId = params.id;
@@ -57,7 +52,8 @@ export default function SessionPage() {
   const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [organizerActionPending, setOrganizerActionPending] = useState(false);
   const [organizerActionError, setOrganizerActionError] = useState<string | null>(null);
-  const [extendDeadlineLocal, setExtendDeadlineLocal] = useState(defaultExtendedDeadlineLocal());
+  const [extendValue, setExtendValue] = useState("30");
+  const [extendUnit, setExtendUnit] = useState<DurationUnit>("minutes");
 
   const load = useCallback(async () => {
     try {
@@ -76,10 +72,12 @@ export default function SessionPage() {
   }, [load]);
 
   // Live "X of Y submitted" without a manual refresh: subscribe to the
-  // participants table (name + timestamp only — never preference data,
-  // that table has no anon read access) for this session, and just re-fetch
-  // the session view whenever it changes. A slow poll stays as a fallback
-  // in case Realtime isn't reachable (e.g. blocked websockets).
+  // session_participants table (name + timestamp only — never preference
+  // data, that table has no anon read access) for this session, and just
+  // re-fetch the session view whenever it changes. A slow poll stays as a
+  // fallback in case Realtime isn't reachable (e.g. blocked websockets),
+  // and also so the frontend eventually notices the deadline has passed
+  // even with nobody else acting on the trip.
   useEffect(() => {
     const channel = supabase
       .channel(`session_participants:${sessionId}`)
@@ -126,11 +124,12 @@ export default function SessionPage() {
 
   async function handleExtendDeadline(e: React.FormEvent) {
     e.preventDefault();
-    if (!extendDeadlineLocal) return;
+    const value = Number(extendValue);
+    if (!Number.isFinite(value) || value <= 0) return;
     setOrganizerActionPending(true);
     setOrganizerActionError(null);
     try {
-      const v = await extendDeadline(sessionId, new Date(extendDeadlineLocal).toISOString());
+      const v = await extendDeadline(sessionId, value, extendUnit);
       setView(v);
       setDeadlinePassed(false);
     } catch (err) {
@@ -160,7 +159,7 @@ export default function SessionPage() {
   );
   const isOrganizer = view != null && myName === view.organizerName;
   const remainingCount = view ? Math.max(view.expectedParticipantCount - view.submittedCount, 0) : 0;
-  const showOrganizerActions = view != null && !view.locked && deadlinePassed && remainingCount > 0;
+  const noResponsesAtDeadline = view != null && !view.locked && deadlinePassed && view.submittedCount === 0;
 
   if (loading) return <main className="flex flex-1 items-center justify-center text-gray-500">Loading…</main>;
   if (notFound || !view)
@@ -172,6 +171,7 @@ export default function SessionPage() {
     );
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/session/${sessionId}` : "";
+  const showBasedOnBanner = view.includedCount !== null && view.includedCount < view.expectedParticipantCount;
 
   if (view.locked) {
     return (
@@ -181,7 +181,23 @@ export default function SessionPage() {
           <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
         </div>
 
-        {view.recommendations && <RecommendationResults recommendations={view.recommendations} />}
+        {showBasedOnBanner && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="font-semibold text-amber-800">
+              Based on {view.includedCount} of {view.expectedParticipantCount} responses
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              The trip window closed before everyone submitted.
+              {view.missingNames && view.missingNames.length > 0
+                ? ` ${view.missingNames.join(", ")} didn't submit in time.`
+                : " We don't have named who's missing — only the count, since this trip wasn't set up with a named list."}
+            </p>
+          </div>
+        )}
+
+        {view.recommendations && (
+          <RecommendationResults recommendations={view.recommendations} />
+        )}
 
         {view.recommendationFailed && (
           <div className="flex flex-col items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
@@ -201,9 +217,32 @@ export default function SessionPage() {
 
         {!view.recommendations && !view.recommendationFailed && (
           <p className="rounded-2xl border border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
-            Everyone&apos;s submitted — finalizing your trip…
+            Finalizing your trip…
           </p>
         )}
+      </main>
+    );
+  }
+
+  if (noResponsesAtDeadline) {
+    return (
+      <main className="flex flex-1 flex-col gap-5 py-2">
+        <div>
+          <h1 className="text-2xl font-bold">{view.title}</h1>
+          <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 text-center">
+          <p className="font-semibold text-gray-800">No responses were submitted before the deadline</p>
+          <p className="mt-1 text-sm text-gray-600">
+            Nothing was generated — there&apos;s nothing to base a recommendation on. Submitting now will immediately
+            finalize the trip using just your response, since the window has already closed.
+          </p>
+        </div>
+        <SessionSubmissionForm
+          initialValues={loadMyValues(sessionId) ?? (myName ? { name: myName } : undefined)}
+          nameHint={isOrganizer ? "you're the organizer — this is how the group will see you" : undefined}
+          onSubmit={handleSubmit}
+        />
       </main>
     );
   }
@@ -233,34 +272,46 @@ export default function SessionPage() {
           </ul>
         )}
         <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          The trip is finalized — and nobody sees any result — the moment everyone above has submitted. That&apos;s
-          intentional: it&apos;s what stops a single early vote from being treated as final. The deadline is just a
-          target, not what triggers it.
+          The trip finalizes the moment everyone above has submitted — or when the window below runs out with at
+          least one response in, whichever happens first. A late arrival after the window closes can itself
+          trigger the result, using just what&apos;s been submitted so far.
         </p>
       </div>
 
-      {showOrganizerActions && isOrganizer && (
+      {isOrganizer && remainingCount > 0 && (
         <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm font-semibold text-amber-800">
-            The deadline passed with {remainingCount} {remainingCount === 1 ? "person" : "people"} still to submit.
+            {remainingCount} {remainingCount === 1 ? "person" : "people"} still to submit.
           </p>
           <p className="text-xs text-gray-600">
-            Nothing happens automatically — pick one: extend the deadline, or drop a non-responding person from the
-            expected count (this can finalize the trip immediately if everyone else has submitted).
+            Want to finish early, or need more time? Drop a non-responder from the count (can finalize immediately
+            if everyone else is in), or add more time to the window.
           </p>
           <form onSubmit={handleExtendDeadline} className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-gray-600">Add</span>
             <input
-              type="datetime-local"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              value={extendDeadlineLocal}
-              onChange={(e) => setExtendDeadlineLocal(e.target.value)}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="w-20 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+              value={extendValue}
+              onChange={(e) => setExtendValue(e.target.value)}
             />
+            <select
+              className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+              value={extendUnit}
+              onChange={(e) => setExtendUnit(e.target.value as DurationUnit)}
+            >
+              <option value="minutes">minutes</option>
+              <option value="hours">hours</option>
+              <option value="days">days</option>
+            </select>
             <button
               type="submit"
               disabled={organizerActionPending}
               className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              Extend deadline
+              Extend
             </button>
           </form>
           <button
@@ -278,7 +329,7 @@ export default function SessionPage() {
         <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
           <p className="font-semibold text-brand-700">You&apos;re in ✅</p>
           <p className="mt-1 text-sm text-gray-600">
-            Thanks{myName ? `, ${myName}` : ""}. You can still edit your answer below until everyone&apos;s submitted.
+            Thanks{myName ? `, ${myName}` : ""}. You can still edit your answer below until the trip finalizes.
           </p>
         </div>
       ) : null}
