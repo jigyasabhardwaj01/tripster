@@ -34,7 +34,7 @@ describe("buildBasedOnNote", () => {
   it("names the missing people when expected_names was given", () => {
     expect(
       buildBasedOnNote(makeSession({ includedCount: 4, expectedParticipantCount: 5, missingNames: ["Karan"] }))
-    ).toBe("Based on 4 of 5 responses — Karan didn't submit in time.");
+    ).toBe("Based on 4 of 5 responses. Karan didn't submit in time.");
   });
 
   it("names multiple missing people, comma-separated", () => {
@@ -42,7 +42,7 @@ describe("buildBasedOnNote", () => {
       buildBasedOnNote(
         makeSession({ includedCount: 3, expectedParticipantCount: 5, missingNames: ["Karan", "Priya"] })
       )
-    ).toBe("Based on 3 of 5 responses — Karan, Priya didn't submit in time.");
+    ).toBe("Based on 3 of 5 responses. Karan, Priya didn't submit in time.");
   });
 
   it("falls back to a count-only note when no expected_names list was given", () => {
@@ -86,6 +86,6 @@ describe("buildItineraryPdfData", () => {
       makeSession({ includedCount: 2, expectedParticipantCount: 4, missingNames: ["Rahul", "Asmi"] }),
       { fromPicks: makeRecommendation("Goa"), discovered: makeRecommendation("Goa"), discoveredVerified: true }
     );
-    expect(result?.basedOnNote).toBe("Based on 2 of 4 responses — Rahul, Asmi didn't submit in time.");
+    expect(result?.basedOnNote).toBe("Based on 2 of 4 responses. Rahul, Asmi didn't submit in time.");
   });
 });

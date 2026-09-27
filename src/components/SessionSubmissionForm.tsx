@@ -120,11 +120,11 @@ export default function SessionSubmissionForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">
+        <span className="text-sm font-medium text-ink">
           Your name{nameHint && ` (${nameHint})`}
         </span>
         <input
-          className="rounded-lg border border-gray-300 px-3 py-2"
+          className="rounded-lg border border-cardBorder px-3 py-2"
           placeholder="e.g. Priya"
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -134,12 +134,12 @@ export default function SessionSubmissionForm({
 
       <div className="flex gap-3">
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Min budget (₹)</span>
+          <span className="text-sm font-medium text-ink">Min budget (₹)</span>
           <input
             type="number"
             inputMode="numeric"
             min={0}
-            className="rounded-lg border border-gray-300 px-3 py-2"
+            className="rounded-lg border border-cardBorder px-3 py-2"
             placeholder="10000"
             value={budgetMin}
             onChange={(e) => setBudgetMin(e.target.value)}
@@ -147,12 +147,12 @@ export default function SessionSubmissionForm({
           />
         </label>
         <label className="flex flex-1 flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Max budget (₹)</span>
+          <span className="text-sm font-medium text-ink">Max budget (₹)</span>
           <input
             type="number"
             inputMode="numeric"
             min={0}
-            className="rounded-lg border border-gray-300 px-3 py-2"
+            className="rounded-lg border border-cardBorder px-3 py-2"
             placeholder="20000"
             value={budgetMax}
             onChange={(e) => setBudgetMax(e.target.value)}
@@ -162,22 +162,22 @@ export default function SessionSubmissionForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-gray-700">Dates you&apos;re available</span>
+        <span className="text-sm font-medium text-ink">Dates you&apos;re available</span>
         {dateRanges.map((r, idx) => (
           <div key={idx} className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <input
                 type="date"
-                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                className="min-w-0 flex-1 rounded-lg border border-cardBorder px-2 py-2 text-sm"
                 value={r.start_date}
                 onChange={(e) => updateRange(idx, "start_date", e.target.value)}
                 required
               />
-              <span className="text-gray-400">–</span>
+              <span className="text-ink/40">–</span>
               <input
                 type="date"
                 min={dayAfter(r.start_date)}
-                className="min-w-0 flex-1 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+                className="min-w-0 flex-1 rounded-lg border border-cardBorder px-2 py-2 text-sm"
                 value={r.exit_date}
                 onChange={(e) => updateRange(idx, "exit_date", e.target.value)}
                 required
@@ -186,23 +186,23 @@ export default function SessionSubmissionForm({
                 <button
                   type="button"
                   onClick={() => removeRange(idx)}
-                  className="shrink-0 px-1 text-gray-400"
+                  className="shrink-0 px-1 text-ink/40"
                   aria-label="Remove date range"
                 >
                   ✕
                 </button>
               )}
             </div>
-            {rangeErrors[idx] && <p className="text-xs text-red-600">{rangeErrors[idx]}</p>}
+            {rangeErrors[idx] && <p className="text-xs text-attention">{rangeErrors[idx]}</p>}
           </div>
         ))}
-        <button type="button" onClick={addRange} className="self-start text-sm font-medium text-brand-700">
+        <button type="button" onClick={addRange} className="self-start text-sm font-medium text-teal">
           + Add another window
         </button>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-gray-700">What kind of trip? (pick any)</span>
+        <span className="text-sm font-medium text-ink">What kind of trip? (pick any)</span>
         <div className="flex flex-wrap gap-2">
           {DESTINATION_TYPES.map((t) => (
             <button
@@ -211,8 +211,8 @@ export default function SessionSubmissionForm({
               onClick={() => toggleType(t)}
               className={`rounded-full border px-3 py-1.5 text-sm capitalize ${
                 destinationTypes.includes(t)
-                  ? "border-brand-500 bg-brand-500 text-white"
-                  : "border-gray-300 text-gray-700"
+                  ? "border-teal bg-teal text-white"
+                  : "border-cardBorder text-ink"
               }`}
             >
               {t}
@@ -222,38 +222,38 @@ export default function SessionSubmissionForm({
       </div>
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">
-          Specific places you&apos;d want to go <span className="font-normal text-gray-400">(optional)</span>
+        <span className="text-sm font-medium text-ink">
+          Specific places you&apos;d want to go <span className="font-normal text-ink/40">(optional)</span>
         </span>
         <input
-          className="rounded-lg border border-gray-300 px-3 py-2"
+          className="rounded-lg border border-cardBorder px-3 py-2"
           placeholder="e.g. Goa, Manali"
           value={preferredLocationsText}
           onChange={(e) => setPreferredLocationsText(e.target.value)}
         />
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-ink/50">
           Comma-separated. Leave blank to let the destination type above speak for you.
         </span>
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-gray-700">Dealbreakers — anything you won&apos;t do</span>
+        <span className="text-sm font-medium text-ink">Dealbreakers, anything you won&apos;t do</span>
         <textarea
-          className="min-h-20 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          className="min-h-20 rounded-lg border border-cardBorder px-3 py-2 text-sm"
           placeholder="e.g. no overnight buses, nothing above 10,000ft"
           value={dealbreakers}
           onChange={(e) => setDealbreakers(e.target.value)}
         />
       </label>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-attention">{error}</p>}
 
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
+        className="rounded-xl bg-teal px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
       >
-        {submitting ? "Saving…" : "Submit my preferences"}
+        {submitting ? "Saving…" : "Send your answers"}
       </button>
     </form>
   );

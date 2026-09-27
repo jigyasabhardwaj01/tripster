@@ -122,7 +122,7 @@ Return:
 - "budget_estimate": transport, stay, food, and activities as short per-person estimate strings (e.g. "₹3,000–5,000"), plus "note" explicitly saying this is an estimate, not a verified price.
 - "attractions": 3-4 top attractions matching the group's stated trip type(s). Do not include cafes, restaurants, or an hour-by-hour itinerary.
 
-Do not invent facts not implied by what's stated above.`;
+Do not invent facts not implied by what's stated above. Write in plain prose, no em dashes, use periods or commas instead.`;
 }
 
 /** Step 1 of the discovered-destination flow: a plain research prompt meant to be called WITH Gemini's google_search tool and WITHOUT a response schema (combining the two suppresses actual grounding — confirmed live). */
@@ -132,7 +132,7 @@ export function buildDiscoverySearchPrompt(submissions: SubmissionForMatching[])
 GROUP CONSTRAINTS:
 ${describeSubmissions(submissions)}
 
-Use web search to find a destination that realistically fits the group's combined budget, date overlap, stated destination types, and dealbreakers — weigh seasonal timing for the actual travel window. Write up: the destination name, why it fits (grounded in what you found), the best travel window within the group's date overlap and what season that is there, a realistic per-person budget breakdown (transport/stay/food/activities), and 3-4 real top attractions there. Cite what you found; do not guess at facts you didn't find.`;
+Use web search to find a destination that realistically fits the group's combined budget, date overlap, stated destination types, and dealbreakers — weigh seasonal timing for the actual travel window. Write up: the destination name, why it fits (grounded in what you found), the best travel window within the group's date overlap and what season that is there, a realistic per-person budget breakdown (transport/stay/food/activities), and 3-4 real top attractions there. Cite what you found; do not guess at facts you didn't find. Write in plain prose, no em dashes, use periods or commas instead.`;
 }
 
 /** Step 2: formats step 1's grounded findings into the strict schema — no search tool here, so it can't quietly re-fabricate past what step 1 actually found. */
@@ -142,7 +142,7 @@ export function buildDiscoveryFormatPrompt(groundedFindings: string): string {
 RESEARCHED FINDINGS:
 ${groundedFindings}
 
-Return "destination", "summary" (one to two sentences), "suggested_window" (start_date, end_date as YYYY-MM-DD, and "season"), "budget_estimate" (transport/stay/food/activities as short strings, plus "note" explicitly saying this is an estimate, not a verified price), and "attractions" (3-4 entries, no cafes/restaurants).`;
+Return "destination", "summary" (one to two sentences), "suggested_window" (start_date, end_date as YYYY-MM-DD, and "season"), "budget_estimate" (transport/stay/food/activities as short strings, plus "note" explicitly saying this is an estimate, not a verified price), and "attractions" (3-4 entries, no cafes/restaurants). Write in plain prose, no em dashes, use periods or commas instead.`;
 }
 
 export function isValidRecommendation(value: unknown): value is Recommendation {

@@ -30,7 +30,7 @@ export default function CountdownTimer({
         countdown.expired ? "bg-gray-100 text-gray-600" : "bg-amber-50 text-amber-800"
       }`}
     >
-      {countdown.expired ? "Trip window closed — finalizing from what's been submitted" : countdown.label}
+      {countdown.expired ? "Trip window closed, finalizing from what's been submitted" : countdown.label}
     </p>
   );
 }

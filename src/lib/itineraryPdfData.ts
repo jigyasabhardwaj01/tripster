@@ -29,11 +29,11 @@ export interface ItineraryPdfRecommendationsInput {
 /** Same honesty rule as the on-screen results: only note it when someone was actually left out, name them when we can. */
 export function buildBasedOnNote(session: ItineraryPdfSessionInput): string | null {
   if (session.includedCount === null || session.includedCount >= session.expectedParticipantCount) return null;
-  const base = `Based on ${session.includedCount} of ${session.expectedParticipantCount} responses`;
+  const base = `Based on ${session.includedCount} of ${session.expectedParticipantCount} responses.`;
   if (session.missingNames && session.missingNames.length > 0) {
-    return `${base} — ${session.missingNames.join(", ")} didn't submit in time.`;
+    return `${base} ${session.missingNames.join(", ")} didn't submit in time.`;
   }
-  return `${base}.`;
+  return base;
 }
 
 /** Null when there's nothing to render yet (discovered is required; from_picks is optional). */

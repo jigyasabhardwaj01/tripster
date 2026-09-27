@@ -69,6 +69,7 @@ export interface SessionViewResponse {
   missingNames: string[] | null;
   recommendations: RecommendationsResponse | null;
   recommendationFailed: boolean;
+  mostCommonDestinationType: string | null;
 }
 
 export class ApiError extends Error {

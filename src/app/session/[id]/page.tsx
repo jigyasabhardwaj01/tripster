@@ -161,12 +161,12 @@ export default function SessionPage() {
   const remainingCount = view ? Math.max(view.expectedParticipantCount - view.submittedCount, 0) : 0;
   const noResponsesAtDeadline = view != null && !view.locked && deadlinePassed && view.submittedCount === 0;
 
-  if (loading) return <main className="flex flex-1 items-center justify-center text-gray-500">Loading…</main>;
+  if (loading) return <main className="flex flex-1 items-center justify-center text-ink/60">Loading…</main>;
   if (notFound || !view)
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
         <p className="font-semibold">Session not found</p>
-        <p className="text-sm text-gray-600">Check the link you were sent.</p>
+        <p className="text-sm text-ink/60">Check the link you were sent.</p>
       </main>
     );
 
@@ -177,30 +177,36 @@ export default function SessionPage() {
     return (
       <main className="flex flex-1 flex-col gap-5 py-2">
         <div>
-          <h1 className="text-2xl font-bold">{view.title}</h1>
-          <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
+          <h1 className="font-headline text-2xl font-medium text-ink">{view.title}</h1>
+          <p className="mt-1 text-sm text-ink/60">Organized by {view.organizerName}</p>
         </div>
 
         {showBasedOnBanner && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-            <p className="font-semibold text-amber-800">
-              Based on {view.includedCount} of {view.expectedParticipantCount} responses
-            </p>
-            <p className="mt-1 text-sm text-gray-700">
-              The trip window closed before everyone submitted.
+          <div className="rounded-2xl border border-cardBorder bg-white p-4">
+            <p className="font-semibold text-ink">
+              Based on {view.includedCount} of {view.expectedParticipantCount} responses.
               {view.missingNames && view.missingNames.length > 0
                 ? ` ${view.missingNames.join(", ")} didn't submit in time.`
-                : " We don't have named who's missing — only the count, since this trip wasn't set up with a named list."}
+                : ""}
             </p>
+            {!(view.missingNames && view.missingNames.length > 0) && (
+              <p className="mt-1 text-sm text-ink/60">
+                The trip window closed before everyone submitted. This trip wasn&apos;t set up with a named list, so
+                only the count is known, not who.
+              </p>
+            )}
           </div>
         )}
 
         {view.recommendations && (
           <>
-            <RecommendationResults recommendations={view.recommendations} />
+            <RecommendationResults
+              recommendations={view.recommendations}
+              mostCommonDestinationType={view.mostCommonDestinationType}
+            />
             <a
               href={`/api/sessions/${sessionId}/itinerary`}
-              className="self-center rounded-xl border border-brand-200 bg-white px-5 py-2.5 text-sm font-semibold text-brand-700 shadow-sm"
+              className="self-center rounded-xl border border-teal-100 bg-white px-5 py-2.5 text-sm font-semibold text-teal shadow-sm"
             >
               Download itinerary (PDF)
             </a>
@@ -208,15 +214,15 @@ export default function SessionPage() {
         )}
 
         {view.recommendationFailed && (
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 text-center">
-            <p className="font-semibold text-red-700">Something went wrong finalizing this trip</p>
-            <p className="text-sm text-gray-600">
-              The AI matching step failed. You can try again — nothing submitted has been lost.
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-attention/30 bg-white p-5 text-center">
+            <p className="font-semibold text-attention">Something went wrong finalizing this trip</p>
+            <p className="text-sm text-ink/60">
+              The AI matching step failed. You can try again, nothing submitted has been lost.
             </p>
             <button
               onClick={handleRetry}
               disabled={retrying}
-              className="rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
+              className="rounded-xl bg-teal px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
             >
               {retrying ? "Retrying…" : "Retry"}
             </button>
@@ -224,7 +230,7 @@ export default function SessionPage() {
         )}
 
         {!view.recommendations && !view.recommendationFailed && (
-          <p className="rounded-2xl border border-gray-200 bg-white p-5 text-center text-sm text-gray-600">
+          <p className="rounded-2xl border border-cardBorder bg-white p-5 text-center text-sm text-ink/60">
             Finalizing your trip…
           </p>
         )}
@@ -236,19 +242,19 @@ export default function SessionPage() {
     return (
       <main className="flex flex-1 flex-col gap-5 py-2">
         <div>
-          <h1 className="text-2xl font-bold">{view.title}</h1>
-          <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
+          <h1 className="font-headline text-2xl font-medium text-ink">{view.title}</h1>
+          <p className="mt-1 text-sm text-ink/60">Organized by {view.organizerName}</p>
         </div>
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 text-center">
-          <p className="font-semibold text-gray-800">No responses were submitted before the deadline</p>
-          <p className="mt-1 text-sm text-gray-600">
-            Nothing was generated — there&apos;s nothing to base a recommendation on. Submitting now will immediately
+        <div className="rounded-2xl border border-cardBorder bg-white p-5 text-center">
+          <p className="font-semibold text-ink">No responses were submitted before the deadline</p>
+          <p className="mt-1 text-sm text-ink/60">
+            Nothing was generated. There&apos;s nothing to base a recommendation on. Submitting now will immediately
             finalize the trip using just your response, since the window has already closed.
           </p>
         </div>
         <SessionSubmissionForm
           initialValues={loadMyValues(sessionId) ?? (myName ? { name: myName } : undefined)}
-          nameHint={isOrganizer ? "you're the organizer — this is how the group will see you" : undefined}
+          nameHint={isOrganizer ? "you're the organizer, this is how the group will see you" : undefined}
           onSubmit={handleSubmit}
         />
       </main>
@@ -258,55 +264,55 @@ export default function SessionPage() {
   return (
     <main className="flex flex-1 flex-col gap-5 py-2">
       <div>
-        <h1 className="text-2xl font-bold">{view.title}</h1>
-        <p className="mt-1 text-sm text-gray-600">Organized by {view.organizerName}</p>
+        <h1 className="font-headline text-2xl font-medium text-ink">{view.title}</h1>
+        <p className="mt-1 text-sm text-ink/60">Organized by {view.organizerName}</p>
       </div>
 
       <ShareLink url={shareUrl} label="Share this link with the group" />
       <CountdownTimer deadline={view.deadline} onExpire={() => setDeadlinePassed(true)} />
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-cardBorder bg-white p-4 shadow-sm">
         <p className="font-semibold">
           {view.submittedCount} of {view.expectedParticipantCount} submitted
         </p>
         {view.submittedNames.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-700">
+          <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/70">
             {view.submittedNames.map((n) => (
               <li key={n} className="flex items-center gap-2">
-                <span className="text-green-600">✓</span>
+                <span className="text-success">✓</span>
                 {n}
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-3 border-t border-gray-100 pt-3 text-xs text-gray-500">
-          The trip finalizes the moment everyone above has submitted — or when the window below runs out with at
+        <p className="mt-3 border-t border-cardBorder pt-3 text-xs text-ink/60">
+          The trip finalizes the moment everyone above has submitted, or when the window below runs out with at
           least one response in, whichever happens first. A late arrival after the window closes can itself
           trigger the result, using just what&apos;s been submitted so far.
         </p>
       </div>
 
       {isOrganizer && remainingCount > 0 && (
-        <div className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-800">
+        <div className="flex flex-col gap-3 rounded-2xl border border-cardBorder bg-white p-4">
+          <p className="text-sm font-semibold text-ink">
             {remainingCount} {remainingCount === 1 ? "person" : "people"} still to submit.
           </p>
-          <p className="text-xs text-gray-600">
-            Want to finish early, or need more time? Drop a non-responder from the count (can finalize immediately
-            if everyone else is in), or add more time to the window.
+          <p className="text-xs text-ink/60">
+            Want to finish early, or need more time? Drop a non-responder from the count, can finalize immediately
+            if everyone else is in, or add more time to the window.
           </p>
           <form onSubmit={handleExtendDeadline} className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-gray-600">Add</span>
+            <span className="text-xs text-ink/60">Add</span>
             <input
               type="number"
               inputMode="numeric"
               min={1}
-              className="w-20 rounded-lg border border-gray-300 px-2 py-2 text-sm"
+              className="w-20 rounded-lg border border-cardBorder px-2 py-2 text-sm"
               value={extendValue}
               onChange={(e) => setExtendValue(e.target.value)}
             />
             <select
-              className="rounded-lg border border-gray-300 px-2 py-2 text-sm"
+              className="rounded-lg border border-cardBorder px-2 py-2 text-sm"
               value={extendUnit}
               onChange={(e) => setExtendUnit(e.target.value as DurationUnit)}
             >
@@ -317,7 +323,7 @@ export default function SessionPage() {
             <button
               type="submit"
               disabled={organizerActionPending}
-              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="rounded-lg bg-teal px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
               Extend
             </button>
@@ -325,26 +331,28 @@ export default function SessionPage() {
           <button
             onClick={handleRemoveParticipant}
             disabled={organizerActionPending}
-            className="self-start rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-800 disabled:opacity-60"
+            className="self-start rounded-lg border border-cardBorder px-4 py-2 text-sm font-semibold text-teal disabled:opacity-60"
           >
             Remove one non-responding participant
           </button>
-          {organizerActionError && <p className="text-xs text-red-600">{organizerActionError}</p>}
+          {organizerActionError && <p className="text-xs text-attention">{organizerActionError}</p>}
         </div>
       )}
 
       {alreadySubmitted ? (
-        <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
-          <p className="font-semibold text-brand-700">You&apos;re in ✅</p>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-center">
+          <p className="font-semibold text-teal-700">You&apos;re in ✅</p>
+          <p className="mt-1 text-sm text-ink/60">
             Thanks{myName ? `, ${myName}` : ""}. You can still edit your answer below until the trip finalizes.
           </p>
         </div>
       ) : null}
 
+      <h2 className="font-headline text-2xl font-medium text-ink">Where do you want to go?</h2>
+
       <SessionSubmissionForm
         initialValues={loadMyValues(sessionId) ?? (myName ? { name: myName } : undefined)}
-        nameHint={isOrganizer ? "you're the organizer — this is how the group will see you" : undefined}
+        nameHint={isOrganizer ? "you're the organizer, this is how the group will see you" : undefined}
         onSubmit={handleSubmit}
       />
     </main>

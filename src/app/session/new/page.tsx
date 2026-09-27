@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import PhotoSlideshow from "@/components/PhotoSlideshow";
+import { allSlideshowImages, ImageManifest } from "@/lib/imageMatching";
 import { addMySession, storeMyName } from "@/lib/mySessions";
 import { ApiError, createSession, DurationUnit } from "@/lib/sessionClient";
 
@@ -15,6 +17,14 @@ export default function NewSessionPage() {
   const [namesText, setNamesText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slideshowImages, setSlideshowImages] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/images/manifest")
+      .then((r) => r.json())
+      .then((manifest: ImageManifest) => setSlideshowImages(allSlideshowImages(manifest)))
+      .catch(() => setSlideshowImages([]));
+  }, []);
 
   const names = namesText
     .split(",")
@@ -29,12 +39,12 @@ export default function NewSessionPage() {
     const duration = Number(durationValue);
     if (!title.trim() || !organizerName.trim()) return;
     if (!Number.isFinite(duration) || duration <= 0) {
-      setError("Enter how long the trip stays open — a positive number.");
+      setError("Enter how long the trip stays open, a positive number.");
       return;
     }
     const count = usingNamedList ? names.length : Number(expectedParticipantCount);
     if (!Number.isInteger(count) || count < 1) {
-      setError("Enter how many people (including you) are expected — at least 1.");
+      setError("Enter how many people, including you, are expected, at least 1.");
       return;
     }
 
@@ -63,93 +73,70 @@ export default function NewSessionPage() {
   }
 
   return (
-    <main className="flex flex-1 flex-col justify-center gap-6 py-4">
-      <div>
-        <h1 className="text-2xl font-bold">Start a trip</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          You&apos;ll get one link to send the group. AI picks a destination the moment everyone submits — or, if the
-          trip window runs out first, from whoever did.
-        </p>
+    <main className="flex flex-1 flex-col">
+      <div className="relative -mx-4 -mt-6 flex h-[48vh] items-end overflow-hidden sm:h-[50vh]">
+        <PhotoSlideshow images={slideshowImages} />
+        <h1 className="relative px-6 pb-8 font-headline text-4xl font-medium leading-tight text-white sm:text-5xl">
+          Let&apos;s plan the trip
+        </h1>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Trip name</span>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5 pt-6">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Trip name</span>
           <input
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            placeholder="e.g. Goa-or-bust 2026"
+            className="rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-ink outline-none focus:border-teal"
+            placeholder="Goa or bust 2026"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             required
           />
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Your name</span>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Your name</span>
           <input
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            placeholder="e.g. Karan"
+            className="rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-ink outline-none focus:border-teal"
+            placeholder="Karan"
             value={organizerName}
             onChange={(e) => setOrganizerName(e.target.value)}
             required
           />
         </label>
 
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">Trip window stays open for</span>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink">Duration</span>
           <div className="flex gap-2">
             <input
               type="number"
               inputMode="numeric"
               min={1}
               step={1}
-              className="w-24 rounded-lg border border-gray-300 px-3 py-2"
+              className="w-24 rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-ink outline-none focus:border-teal"
               value={durationValue}
               onChange={(e) => setDurationValue(e.target.value)}
               required
             />
             <select
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2"
+              className="flex-1 rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-ink outline-none focus:border-teal"
               value={durationUnit}
               onChange={(e) => setDurationUnit(e.target.value as DurationUnit)}
             >
-              <option value="minutes">minutes</option>
-              <option value="hours">hours</option>
-              <option value="days">days</option>
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
             </select>
           </div>
-          <span className="text-xs text-gray-500">
-            A hard cutoff, not just a target: the deadline is created_at + this duration. Generation fires the
-            moment everyone submits, or when this runs out with at least one response in — whichever comes first.
-            5 minutes is fine for testing.
-          </span>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-gray-700">
-            Who&apos;s coming? <span className="font-normal text-gray-400">(optional, comma-separated)</span>
-          </span>
-          <input
-            className="rounded-lg border border-gray-300 px-3 py-2"
-            placeholder="e.g. Karan, Priya, Rahul"
-            value={namesText}
-            onChange={(e) => setNamesText(e.target.value)}
-          />
-          <span className="text-xs text-gray-500">
-            {usingNamedList
-              ? `Expecting ${names.length} ${names.length === 1 ? "person" : "people"} — if the deadline hits early, we can name exactly who didn't make it.`
-              : "Leave blank to just set a headcount below — if the deadline hits early, we'll only be able to say how many were missing, not who."}
-          </span>
         </label>
 
         {!usingNamedList && (
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium text-gray-700">How many people, including you?</span>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Expected participants</span>
             <input
               type="number"
               inputMode="numeric"
               min={1}
-              className="rounded-lg border border-gray-300 px-3 py-2"
+              className="rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-ink outline-none focus:border-teal"
               value={expectedParticipantCount}
               onChange={(e) => setExpectedParticipantCount(e.target.value)}
               required
@@ -157,14 +144,31 @@ export default function NewSessionPage() {
           </label>
         )}
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm text-ink/70">
+            Who&apos;s coming, optional
+          </span>
+          <input
+            className="rounded-lg border border-cardBorder bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-teal"
+            placeholder="Karan, Priya, Rahul"
+            value={namesText}
+            onChange={(e) => setNamesText(e.target.value)}
+          />
+          <span className="text-xs text-ink/50">
+            {usingNamedList
+              ? `Expecting ${names.length} ${names.length === 1 ? "person" : "people"}.`
+              : "Name people here if you want them called out by name later, in case someone misses the deadline."}
+          </span>
+        </label>
+
+        {error && <p className="text-sm text-attention">{error}</p>}
 
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
+          className="mt-2 rounded-xl bg-teal px-6 py-3.5 font-semibold text-white shadow-sm disabled:opacity-60"
         >
-          {submitting ? "Creating…" : "Create trip & get link"}
+          {submitting ? "Creating…" : "Create trip link"}
         </button>
       </form>
     </main>

@@ -4,6 +4,7 @@ import { generateDiscovered, generateFromPicks, Recommendation, SubmissionForMat
 import { DateRange, validateDateRanges } from "./dateRangeValidation";
 import { buildItineraryPdfData } from "./itineraryPdfData";
 import { renderItineraryPdf } from "./itineraryPdf";
+import { mostCommonDestinationType } from "./imageMatching";
 import {
   computeDeadline,
   computeMissingNames,
@@ -335,13 +336,32 @@ async function runGenerationAndSave(sessionId: string): Promise<void> {
   }
 }
 
+// App copy (including AI-generated text) never uses em dashes — the
+// prompts already ask for periods/commas instead, but this is the
+// backstop in case the model slips one in anyway. Applied once here, at
+// the point every recommendation gets saved, so both the on-screen
+// display and the PDF stay consistent without sanitizing in two places.
+function stripEmDashes(s: string): string {
+  return s.replace(/\s*—\s*/g, ", ").replace(/—/g, ",");
+}
+
 function toRecommendationRow(r: Recommendation) {
   return {
-    destination: r.destination,
-    summary: r.summary,
-    suggested_window: r.suggested_window,
-    budget_estimate: r.budget_estimate,
-    attractions: r.attractions,
+    destination: stripEmDashes(r.destination),
+    summary: stripEmDashes(r.summary),
+    suggested_window: {
+      start_date: r.suggested_window.start_date,
+      end_date: r.suggested_window.end_date,
+      season: stripEmDashes(r.suggested_window.season),
+    },
+    budget_estimate: {
+      transport: stripEmDashes(r.budget_estimate.transport),
+      stay: stripEmDashes(r.budget_estimate.stay),
+      food: stripEmDashes(r.budget_estimate.food),
+      activities: stripEmDashes(r.budget_estimate.activities),
+      note: stripEmDashes(r.budget_estimate.note),
+    },
+    attractions: r.attractions.map(stripEmDashes),
   };
 }
 
@@ -351,6 +371,8 @@ export interface SessionView {
   submittedCount: number;
   recommendations: RecommendationsRow | null;
   recommendationFailed: boolean;
+  /** A single aggregated tag (e.g. "beach"), never raw per-person preference data — used only for results-page image matching. */
+  mostCommonDestinationType: string | null;
 }
 
 export async function loadSessionView(sessionId: string): Promise<SessionView | null> {
@@ -365,9 +387,11 @@ export async function loadSessionView(sessionId: string): Promise<SessionView | 
   }
 
   const freshSession = (await getSession(sessionId)) ?? session;
-  const [submittedNames, recommendations] = await Promise.all([
+  const isComplete = freshSession.submission_status === "complete";
+  const [submittedNames, recommendations, submissions] = await Promise.all([
     listParticipantNames(sessionId),
-    freshSession.submission_status === "complete" ? getRecommendations(sessionId) : Promise.resolve(null),
+    isComplete ? getRecommendations(sessionId) : Promise.resolve(null),
+    isComplete ? listSubmissions(sessionId) : Promise.resolve([]),
   ]);
 
   return {
@@ -376,6 +400,7 @@ export async function loadSessionView(sessionId: string): Promise<SessionView | 
     submittedCount: submittedNames.length,
     recommendations,
     recommendationFailed: freshSession.recommendation_status === "failed",
+    mostCommonDestinationType: mostCommonDestinationType(submissions.map((s) => s.destination_types)),
   };
 }
 
@@ -506,5 +531,6 @@ export function toApiResponse(view: SessionView) {
     missingNames: session.missing_names,
     recommendations: session.submission_status === "complete" ? view.recommendations : null,
     recommendationFailed: view.recommendationFailed,
+    mostCommonDestinationType: view.mostCommonDestinationType,
   };
 }
