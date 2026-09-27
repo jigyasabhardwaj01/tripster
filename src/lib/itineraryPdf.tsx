@@ -44,13 +44,45 @@ const styles = StyleSheet.create({
 });
 
 // Helvetica (the built-in PDF base font used here) has no ₹ glyph — it
-// silently renders as a garbled superscript character instead, found by
-// actually extracting text from a live-rendered PDF, not just reading the
-// component code. Swapping in "Rs." for the PDF only keeps this legible
-// without needing to bundle/fetch a custom font just for one symbol; the
-// on-screen UI is unaffected and keeps the real ₹ glyph.
+// silently renders as a garbled character instead, found by actually
+// extracting text from a live-rendered PDF, not just reading the component
+// code (it showed up not only in the structured budget rows but in the
+// model's own free-text summary/season prose too, since Gemini naturally
+// writes inline ₹ figures there). Swapping in "Rs." for the PDF only keeps
+// this legible without needing to bundle/fetch a custom font just for one
+// symbol; the on-screen UI is unaffected and keeps the real ₹ glyph.
+//
+// Also found live: Gemini doesn't always emit the literal ₹ codepoint —
+// one real response used ’ (U+2019, a right single quote) as its own
+// stand-in right before a digit ("’10,000"). A real apostrophe never
+// precedes a digit in this app's text, so that position is used as the
+// signal rather than blanket-replacing ’ (which would otherwise mangle
+// ordinary contractions/possessives elsewhere in the same sentence).
 function toAsciiCurrency(s: string): string {
-  return s.replace(/₹/g, "Rs. ");
+  // ‘ = ‘, ’ = ’ — written as escapes, not literal characters,
+  // after a previous attempt at this same line silently typed the wrong
+  // lookalike quote character and missed the actual one Gemini used.
+  return s.replace(/₹/g, "Rs. ").replace(/[‘’'](?=\d)/g, "Rs. ");
+}
+
+function sanitizeRecommendation(r: Recommendation): Recommendation {
+  return {
+    destination: toAsciiCurrency(r.destination),
+    summary: toAsciiCurrency(r.summary),
+    suggested_window: {
+      start_date: r.suggested_window.start_date,
+      end_date: r.suggested_window.end_date,
+      season: toAsciiCurrency(r.suggested_window.season),
+    },
+    budget_estimate: {
+      transport: toAsciiCurrency(r.budget_estimate.transport),
+      stay: toAsciiCurrency(r.budget_estimate.stay),
+      food: toAsciiCurrency(r.budget_estimate.food),
+      activities: toAsciiCurrency(r.budget_estimate.activities),
+      note: toAsciiCurrency(r.budget_estimate.note),
+    },
+    attractions: r.attractions.map(toAsciiCurrency),
+  };
 }
 
 function RecommendationSection({ recommendation, label, badge }: { recommendation: Recommendation; label: string; badge?: string }) {
@@ -70,19 +102,19 @@ function RecommendationSection({ recommendation, label, badge }: { recommendatio
       <Text style={styles.subheading}>Budget estimate (per person)</Text>
       <View style={styles.row}>
         <Text>Transport</Text>
-        <Text>{toAsciiCurrency(recommendation.budget_estimate.transport)}</Text>
+        <Text>{recommendation.budget_estimate.transport}</Text>
       </View>
       <View style={styles.row}>
         <Text>Stay</Text>
-        <Text>{toAsciiCurrency(recommendation.budget_estimate.stay)}</Text>
+        <Text>{recommendation.budget_estimate.stay}</Text>
       </View>
       <View style={styles.row}>
         <Text>Food</Text>
-        <Text>{toAsciiCurrency(recommendation.budget_estimate.food)}</Text>
+        <Text>{recommendation.budget_estimate.food}</Text>
       </View>
       <View style={styles.row}>
         <Text>Activities</Text>
-        <Text>{toAsciiCurrency(recommendation.budget_estimate.activities)}</Text>
+        <Text>{recommendation.budget_estimate.activities}</Text>
       </View>
       <Text style={styles.muted}>{recommendation.budget_estimate.note}</Text>
 
@@ -97,14 +129,16 @@ function RecommendationSection({ recommendation, label, badge }: { recommendatio
 }
 
 function ItineraryDocument({ data }: { data: ItineraryPdfData }) {
+  const fromPicks = data.fromPicks ? sanitizeRecommendation(data.fromPicks) : null;
+  const discovered = sanitizeRecommendation(data.discovered);
   return (
     <Document title={`${data.title} — Itinerary`}>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>{data.title}</Text>
-        {data.basedOnNote && <Text style={styles.basedOnNote}>{data.basedOnNote}</Text>}
-        {data.fromPicks && <RecommendationSection recommendation={data.fromPicks} label="From your picks" />}
+        <Text style={styles.title}>{toAsciiCurrency(data.title)}</Text>
+        {data.basedOnNote && <Text style={styles.basedOnNote}>{toAsciiCurrency(data.basedOnNote)}</Text>}
+        {fromPicks && <RecommendationSection recommendation={fromPicks} label="From your picks" />}
         <RecommendationSection
-          recommendation={data.discovered}
+          recommendation={discovered}
           label="Discovered for you"
           badge={data.discoveredVerified ? "Web-search verified" : "AI-suggested, not independently verified"}
         />
