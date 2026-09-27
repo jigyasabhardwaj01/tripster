@@ -74,7 +74,7 @@ export default function NewSessionPage() {
 
   return (
     <main className="flex flex-1 flex-col">
-      <div className="relative -mx-4 -mt-6 flex h-[48vh] items-end overflow-hidden sm:h-[50vh]">
+      <div className="relative -mx-4 -mt-6 flex h-screen items-end overflow-hidden">
         <PhotoSlideshow images={slideshowImages} />
         <h1 className="relative px-6 pb-8 font-headline text-4xl font-medium leading-tight text-white sm:text-5xl">
           Let&apos;s plan the trip

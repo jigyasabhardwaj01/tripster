@@ -186,8 +186,8 @@ export default function TripPage() {
       {trip.status === "collecting" && (
         <>
           {myResponse ? (
-            <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4 text-center">
-              <p className="font-semibold text-brand-700">You&apos;re in ✅</p>
+            <div className="rounded-2xl border border-teal-100 bg-teal-50 p-4 text-center">
+              <p className="font-semibold text-teal-700">You&apos;re in ✅</p>
               <p className="mt-1 text-sm text-gray-600">
                 Thanks, {myParticipant?.name}. We&apos;ll match destinations automatically once enough of the group
                 has responded.
@@ -238,7 +238,7 @@ export default function TripPage() {
                 required
               />
               {lookupError && <p className="text-sm text-red-600">{lookupError}</p>}
-              <button type="submit" className="rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white">
+              <button type="submit" className="rounded-xl bg-teal px-6 py-3 font-semibold text-white">
                 Continue
               </button>
             </form>

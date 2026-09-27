@@ -26,7 +26,7 @@ export default function MySessionsPage() {
       ) : sessions.length === 0 ? (
         <div className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-gray-300 p-6 text-center">
           <p className="text-sm text-gray-600">No trips yet on this device.</p>
-          <Link href="/session/new" className="rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white">
+          <Link href="/session/new" className="rounded-xl bg-teal px-5 py-2.5 text-sm font-semibold text-white">
             Start a trip
           </Link>
         </div>
@@ -37,7 +37,7 @@ export default function MySessionsPage() {
               <h3 className="font-semibold">{s.title}</h3>
               <Link
                 href={`/session/${s.sessionId}`}
-                className="mt-3 block rounded-lg bg-brand-500 px-3 py-1.5 text-center text-sm font-medium text-white"
+                className="mt-3 block rounded-lg bg-teal px-3 py-1.5 text-center text-sm font-medium text-white"
               >
                 Open trip
               </Link>
@@ -46,7 +46,7 @@ export default function MySessionsPage() {
         </div>
       )}
 
-      <Link href="/session/new" className="text-center text-sm font-medium text-brand-700">
+      <Link href="/session/new" className="text-center text-sm font-medium text-teal-700">
         + Start another trip
       </Link>
     </main>

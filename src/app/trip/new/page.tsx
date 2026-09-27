@@ -125,7 +125,7 @@ export default function NewTripPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-2 rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
+          className="mt-2 rounded-xl bg-teal px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
         >
           {submitting ? "Creating…" : "Create trip & get link"}
         </button>

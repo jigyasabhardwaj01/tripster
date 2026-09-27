@@ -139,7 +139,7 @@ export default function SubmissionForm({
             )}
           </div>
         ))}
-        <button type="button" onClick={addRange} className="self-start text-sm font-medium text-brand-700">
+        <button type="button" onClick={addRange} className="self-start text-sm font-medium text-teal-700">
           + Add another window
         </button>
       </div>
@@ -154,7 +154,7 @@ export default function SubmissionForm({
               onClick={() => toggle(destinationTypes, t, setDestinationTypes)}
               className={`rounded-full border px-3 py-1.5 text-sm capitalize ${
                 destinationTypes.includes(t)
-                  ? "border-brand-500 bg-brand-500 text-white"
+                  ? "border-teal bg-teal text-white"
                   : "border-gray-300 text-gray-700"
               }`}
             >
@@ -186,7 +186,7 @@ export default function SubmissionForm({
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-xl bg-brand-500 px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
+        className="rounded-xl bg-teal px-6 py-3 font-semibold text-white shadow-sm disabled:opacity-60"
       >
         {submitting ? "Saving…" : "Submit my preferences"}
       </button>

@@ -16,8 +16,8 @@ export default function ShareLink({ url, label }: { url: string; label: string }
   }
 
   return (
-    <div className="rounded-xl border border-brand-100 bg-brand-50 p-3">
-      <p className="text-xs font-medium text-brand-700">{label}</p>
+    <div className="rounded-xl border border-teal-100 bg-teal-50 p-3">
+      <p className="text-xs font-medium text-teal-700">{label}</p>
       <div className="mt-1 flex items-center gap-2">
         <input
           readOnly
@@ -28,7 +28,7 @@ export default function ShareLink({ url, label }: { url: string; label: string }
         <button
           type="button"
           onClick={copy}
-          className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white"
+          className="shrink-0 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white"
         >
           {copied ? "Copied" : "Copy"}
         </button>
