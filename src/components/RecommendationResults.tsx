@@ -34,7 +34,7 @@ function BoardingPassCard({ recommendation, mostCommonDestinationType }: { recom
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border border-cardBorder bg-white shadow-sm transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`relative overflow-hidden rounded-2xl border border-cardBorder bg-white shadow-[0_14px_30px_-10px_rgba(139,111,71,0.45)] transition-opacity duration-700 ${visible ? "opacity-100" : "opacity-0"}`}
       style={{
         borderTop: "3px solid #E8823C",
         borderStyle: "dashed",
@@ -43,6 +43,11 @@ function BoardingPassCard({ recommendation, mostCommonDestinationType }: { recom
         borderTopStyle: "solid",
       }}
     >
+      {/* Ticket-stub notch, punched into the left edge. */}
+      <span className="pointer-events-none absolute left-0 top-1/2 z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cardBorder bg-paper" />
+      <span className="absolute left-3 top-3 z-10 rounded-full bg-teal px-2.5 py-1 text-[11px] font-semibold text-white">
+        From your picks
+      </span>
       {image && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt="" className="h-44 w-full object-cover" />
@@ -102,7 +107,10 @@ function PlainDestinationCard({
   const image = useDestinationImage(recommendation.destination, mostCommonDestinationType);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-cardBorder bg-white shadow-sm">
+    <div className="relative overflow-hidden rounded-2xl border border-cardBorder bg-white shadow-sm">
+      <span className="absolute left-3 top-3 z-10 rounded-full bg-teal px-2.5 py-1 text-[11px] font-semibold text-white">
+        Discovered for you
+      </span>
       {image && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={image} alt="" className="h-36 w-full object-cover" />
@@ -153,6 +161,27 @@ function PlainDestinationCard({
           </ul>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Calm placeholder shown while the AI finalizes the trip, shaped like the
+// real result cards so the wait doesn't feel like a dead spinner.
+export function ResultsSkeleton() {
+  return (
+    <div className="flex flex-col gap-5">
+      {[0, 1].map((i) => (
+        <div key={i} className="animate-pulse-slow overflow-hidden rounded-2xl border border-cardBorder bg-white">
+          <div className="h-40 w-full bg-paper" />
+          <div className="flex flex-col gap-3 p-5">
+            <div className="h-4 w-24 rounded-full bg-paper" />
+            <div className="h-6 w-2/3 rounded bg-paper" />
+            <div className="h-3 w-full rounded bg-paper" />
+            <div className="h-3 w-5/6 rounded bg-paper" />
+            <div className="h-16 w-full rounded-xl bg-paper" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

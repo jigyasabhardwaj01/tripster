@@ -28,6 +28,20 @@ const config: Config = {
         headline: ["var(--font-fraunces)", "Georgia", "serif"],
         sans: ["var(--font-public-sans)", "system-ui", "sans-serif"],
       },
+      keyframes: {
+        "pulse-slow": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.55" },
+        },
+        "page-fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+      },
+      animation: {
+        "pulse-slow": "pulse-slow 2.8s ease-in-out infinite",
+        "page-fade-in": "page-fade-in 250ms ease-out",
+      },
     },
   },
   plugins: [],

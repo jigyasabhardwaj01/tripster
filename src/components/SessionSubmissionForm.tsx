@@ -1,8 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { Building2, Compass, Landmark, Mountain, PawPrint, Waves } from "lucide-react";
 import { DESTINATION_TYPES, DestinationType } from "@/lib/types";
 import { DateRangeInput, SubmissionInput } from "@/lib/sessionClient";
+
+const DESTINATION_TYPE_ICONS: Record<DestinationType, typeof Waves> = {
+  beach: Waves,
+  hills: Mountain,
+  city: Building2,
+  adventure: Compass,
+  heritage: Landmark,
+  wildlife: PawPrint,
+};
 
 function emptyRange(): DateRangeInput {
   return { start_date: "", exit_date: "" };
@@ -204,20 +214,23 @@ export default function SessionSubmissionForm({
       <div className="flex flex-col gap-2">
         <span className="text-sm font-medium text-ink">What kind of trip? (pick any)</span>
         <div className="flex flex-wrap gap-2">
-          {DESTINATION_TYPES.map((t) => (
-            <button
-              type="button"
-              key={t}
-              onClick={() => toggleType(t)}
-              className={`rounded-full border px-3 py-1.5 text-sm capitalize ${
-                destinationTypes.includes(t)
-                  ? "border-teal bg-teal text-white"
-                  : "border-cardBorder text-ink"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+          {DESTINATION_TYPES.map((t) => {
+            const Icon = DESTINATION_TYPE_ICONS[t];
+            const selected = destinationTypes.includes(t);
+            return (
+              <button
+                type="button"
+                key={t}
+                onClick={() => toggleType(t)}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm capitalize transition-all duration-150 active:scale-95 ${
+                  selected ? "border-teal bg-teal text-white" : "border-cardBorder text-ink active:bg-teal-50"
+                }`}
+              >
+                <Icon size={15} strokeWidth={2} />
+                {t}
+              </button>
+            );
+          })}
         </div>
       </div>
 

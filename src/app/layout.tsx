@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Public_Sans } from "next/font/google";
 import "./globals.css";
+import PageTransition from "@/components/PageTransition";
 
 // Headline font for the main question on each page and destination names
 // only; kept to the softer end of Fraunces' optical-size axis and a
@@ -37,7 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${fraunces.variable} ${publicSans.variable}`}>
       <body className="min-h-screen bg-paper font-sans text-ink antialiased">
-        <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 sm:max-w-lg">{children}</div>
+        <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-md flex-col px-4 py-6 sm:max-w-lg">
+          <PageTransition>{children}</PageTransition>
+        </div>
       </body>
     </html>
   );

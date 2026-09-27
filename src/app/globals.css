@@ -9,15 +9,38 @@ body {
 }
 
 body {
+  position: relative;
   color: #2b2a28;
   background: #faf7f2;
   font-family: var(--font-public-sans), system-ui, sans-serif;
+}
+
+/* Very faint paper grain so the warm background reads as texture, not a flat
+   digital fill. Fixed + behind everything, purely decorative. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 input,
 select,
 textarea {
   font-size: 16px; /* prevents iOS auto-zoom on focus */
+}
+
+button,
+a {
+  transition: transform 150ms ease;
+}
+
+button:active,
+a:active {
+  transform: scale(0.97);
 }
 
 @media (prefers-reduced-motion: reduce) {

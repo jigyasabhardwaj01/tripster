@@ -24,11 +24,13 @@ export default function CountdownTimer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deadline]);
 
+  const underAnHour = !countdown.expired && countdown.days === 0 && countdown.hours === 0;
+
   return (
     <p
       className={`rounded-xl px-4 py-2 text-center text-sm font-medium ${
-        countdown.expired ? "bg-gray-100 text-gray-600" : "bg-amber-50 text-amber-800"
-      }`}
+        countdown.expired ? "bg-cardBorder/40 text-ink/60" : "bg-amber-50 text-amber-600"
+      } ${underAnHour ? "animate-pulse-slow" : ""}`}
     >
       {countdown.expired ? "Trip window closed, finalizing from what's been submitted" : countdown.label}
     </p>

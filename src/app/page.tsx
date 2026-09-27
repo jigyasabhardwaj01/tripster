@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col">
-      <div className="relative -mx-4 -mt-6 flex h-screen items-end overflow-hidden">
+      <div className="relative left-1/2 -ml-[50vw] -mt-6 flex h-screen w-screen items-end overflow-hidden">
         <Image
           src="/images/moods/beach/beach-papaya.jpg"
           alt=""

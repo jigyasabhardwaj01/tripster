@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import CountdownTimer from "@/components/CountdownTimer";
-import RecommendationResults from "@/components/RecommendationResults";
+import RecommendationResults, { ResultsSkeleton } from "@/components/RecommendationResults";
 import ShareLink from "@/components/ShareLink";
 import SessionSubmissionForm, { SessionSubmissionFormValues } from "@/components/SessionSubmissionForm";
+import { initials } from "@/lib/avatar";
 import { supabase } from "@/lib/supabase";
 import { addMySession, getMyName, storeMyName } from "@/lib/mySessions";
 import {
@@ -20,6 +21,18 @@ import {
 } from "@/lib/sessionClient";
 
 const MY_VALUES_KEY = (sessionId: string) => `tripster:session:${sessionId}:myValues`;
+
+function Avatar({ name, filled }: { name: string; filled: boolean }) {
+  return (
+    <span
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+        filled ? "bg-teal text-white" : "border border-cardBorder text-ink/40"
+      }`}
+    >
+      {filled ? initials(name) : "?"}
+    </span>
+  );
+}
 
 function loadMyValues(sessionId: string): Partial<SessionSubmissionFormValues> | undefined {
   if (typeof window === "undefined") return undefined;
@@ -70,6 +83,10 @@ export default function SessionPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (view?.title) document.title = `${view.title} · Tripster`;
+  }, [view?.title]);
 
   // Live "X of Y submitted" without a manual refresh: subscribe to the
   // session_participants table (name + timestamp only — never preference
@@ -230,9 +247,10 @@ export default function SessionPage() {
         )}
 
         {!view.recommendations && !view.recommendationFailed && (
-          <p className="rounded-2xl border border-cardBorder bg-white p-5 text-center text-sm text-ink/60">
-            Finalizing your trip…
-          </p>
+          <>
+            <p className="text-center text-sm text-ink/60">Finalizing your trip…</p>
+            <ResultsSkeleton />
+          </>
         )}
       </main>
     );
@@ -276,11 +294,17 @@ export default function SessionPage() {
           {view.submittedCount} of {view.expectedParticipantCount} submitted
         </p>
         {view.submittedNames.length > 0 && (
-          <ul className="mt-2 flex flex-col gap-1 text-sm text-ink/70">
+          <ul className="mt-3 flex flex-col gap-2 text-sm text-ink/70">
             {view.submittedNames.map((n) => (
-              <li key={n} className="flex items-center gap-2">
-                <span className="text-success">✓</span>
+              <li key={n} className="flex items-center gap-2.5">
+                <Avatar name={n} filled />
                 {n}
+              </li>
+            ))}
+            {Array.from({ length: remainingCount }).map((_, i) => (
+              <li key={`pending-${i}`} className="flex items-center gap-2.5 text-ink/40">
+                <Avatar name="" filled={false} />
+                Waiting on a response
               </li>
             ))}
           </ul>
